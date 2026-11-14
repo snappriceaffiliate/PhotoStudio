@@ -34,8 +34,10 @@ class Row:
 
     @property
     def base_name(self) -> str:
+        """Filename without its extension; never empty, so a copy pattern cannot match everything."""
         name = self.filename
-        return name.rsplit(".", 1)[0] if "." in name else name
+        stem = name.rsplit(".", 1)[0] if "." in name else name
+        return stem or name
 
 
 @dataclass
@@ -68,6 +70,12 @@ def build(fmt: str, event_title: str, client_name: str, rows: list[Row]) -> Expo
     raise ValueError(f"Unknown format {fmt}")
 
 
+def _cell(value) -> str:
+    """Stop spreadsheet formula injection: a note like =HYPERLINK(...) stays plain text."""
+    text = str(value)
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
+
+
 def _csv(rows: list[Row]) -> bytes:
     out = io.StringIO()
     writer = csv.writer(out)
@@ -78,11 +86,11 @@ def _csv(rows: list[Row]) -> bytes:
         writer.writerow(
             [
                 i,
-                r.folder,
-                r.filename,
-                r.relative_path,
-                r.album,
-                r.note,
+                _cell(r.folder),
+                _cell(r.filename),
+                _cell(r.relative_path),
+                _cell(r.album),
+                _cell(r.note),
                 timezone.localtime(r.selected_at).strftime("%Y-%m-%d %H:%M"),
                 r.photo_id,
             ]
@@ -96,6 +104,13 @@ def _lightroom(rows: list[Row]) -> str:
     return ", ".join(names) + "\n"
 
 
+def _comment_text(value: str) -> str:
+    """Event titles and client names in script comments: letters, digits and simple
+    punctuation only, on one line, so they can never become a command."""
+    kept = "".join(ch if ch.isalnum() or ch in " .,'-_" else " " for ch in value)
+    return " ".join(kept.split())[:80] or "-"
+
+
 def _sh_quote(value: str) -> str:
     return "'" + value.replace("'", "'\\''") + "'"
 
@@ -103,7 +118,7 @@ def _sh_quote(value: str) -> str:
 def _mac_script(event_title: str, client_name: str, rows: list[Row]) -> str:
     lines = [
         "#!/bin/bash",
-        f"# {len(rows)} photos selected by {client_name} for {event_title}.",
+        f"# {len(rows)} photos selected by {_comment_text(client_name)} for {_comment_text(event_title)}.",
         "# Put this file in the event folder you uploaded, then in Terminal run:",
         "#   bash copy-selected.sh",
         '# Copies are made in a new "Selected" folder. Your originals are not changed.',
@@ -113,8 +128,8 @@ def _mac_script(event_title: str, client_name: str, rows: list[Row]) -> str:
         "found=0; missing=0",
         "copy_photo() {",
         '  local dir="$1" base="$2" matched=0',
-        '  for file in "$dir/$base".*; do',
-        '    mkdir -p "Selected/$dir" && cp -p "$file" "Selected/$dir/" && matched=1',
+        '  for file in "./$dir/$base".*; do',
+        '    mkdir -p -- "Selected/$dir" && cp -p -- "$file" "Selected/$dir/" && matched=1',
         "  done",
         '  if [ "$matched" = 1 ]; then found=$((found+1)); else missing=$((missing+1)); echo "Not found: $dir/$base"; fi',
         "}",
@@ -131,43 +146,40 @@ def _mac_script(event_title: str, client_name: str, rows: list[Row]) -> str:
     return "\n".join(lines)
 
 
-def _cmd_quote(value: str) -> str:
-    # Inside double quotes cmd still expands %VAR%; double the % signs to keep them literal.
-    return '"' + value.replace("%", "%%").replace('"', "") + '"'
-
-
 def _windows_script(event_title: str, client_name: str, rows: list[Row]) -> str:
+    """The photo list lives in "::P|folder|name" data lines at the end of the script, read
+    back with findstr. cmd expands FOR variables after it has parsed the line, so characters
+    such as & | ( ) % ! in folder or file names are never run as commands. "|" cannot appear
+    in Windows file names, so it is a safe separator.
+    """
     lines = [
         "@echo off",
-        f"rem {len(rows)} photos selected by {client_name} for {event_title}.",
+        f"rem {len(rows)} photos selected by {_comment_text(client_name)} for {_comment_text(event_title)}.",
         "rem Put this file in the event folder you uploaded, then double-click it.",
         'rem Copies are made in a new "Selected" folder. Your originals are not changed.',
+        "setlocal DisableDelayedExpansion",
         "chcp 65001 >nul",
         'cd /d "%~dp0"',
-        "set found=0",
-        "set missing=0",
-        "",
-    ]
-    for r in rows:
-        folder = (r.folder or ".").replace("/", "\\")
-        lines.append(f"call :copy_photo {_cmd_quote(folder)} {_cmd_quote(r.base_name)}")
-    lines += [
-        "",
+        "set /a found=0, missing=0",
+        'for /f "usebackq tokens=2,3 delims=|" %%A in (`findstr /b /c:"::P|" "%~f0"`) do (',
+        '  if exist "%%A\\%%B.*" (',
+        '    if not exist "Selected\\%%A\\" mkdir "Selected\\%%A"',
+        '    copy /Y "%%A\\%%B.*" "Selected\\%%A\\" >nul',
+        "    set /a found+=1",
+        "  ) else (",
+        '    echo Not found: "%%A\\%%B"',
+        "    set /a missing+=1",
+        "  )",
+        ")",
         f"echo Copied %found% of {len(rows)} selected photos into the Selected folder.",
         "if %missing% gtr 0 echo %missing% photos were not found. Is this the folder you uploaded?",
         "pause",
         "exit /b",
         "",
-        ":copy_photo",
-        'if exist "%~1\\%~2.*" (',
-        '  if not exist "Selected\\%~1" mkdir "Selected\\%~1"',
-        '  copy /Y "%~1\\%~2.*" "Selected\\%~1\\" >nul',
-        "  set /a found+=1",
-        ") else (",
-        "  echo Not found: %~1\\%~2",
-        "  set /a missing+=1",
-        ")",
-        "exit /b",
-        "",
+        "rem Selected photos, one per line: folder, then name without extension.",
     ]
+    for r in rows:
+        folder = (r.folder or ".").replace("/", "\\")
+        lines.append(f"::P|{folder}|{r.base_name}")
+    lines.append("")
     return "\n".join(lines)

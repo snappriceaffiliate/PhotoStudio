@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -19,8 +20,12 @@ def env_list(name: str, default: str) -> list[str]:
     return [v.strip() for v in os.environ.get(name, default).split(",") if v.strip()]
 
 
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-insecure-key-change-me")
 DEBUG = env_bool("DJANGO_DEBUG", False)
+_DEV_SECRET_KEY = "dev-only-insecure-key-change-me"
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", _DEV_SECRET_KEY)
+if not DEBUG and SECRET_KEY in ("", _DEV_SECRET_KEY):
+    # A public key would let anyone forge sessions and password-reset links.
+    raise ImproperlyConfigured("Set DJANGO_SECRET_KEY to a long random value.")
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", "http://localhost:5173")
 
@@ -35,6 +40,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "django_otp",
+    "django_otp.plugins.otp_totp",
     "procrastinate.contrib.django",
     "apps.core",
     "apps.studios",
@@ -55,9 +62,11 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django_otp.middleware.OTPMiddleware",
     "apps.core.tenancy.TenantMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "apps.core.security.SecurityHeadersMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -118,12 +127,21 @@ CSRF_COOKIE_SAMESITE = "Lax"
 
 # Production hardening. The app runs behind the hosting platform's HTTPS proxy.
 SECURE = not DEBUG
-SESSION_COOKIE_SECURE = SECURE
-CSRF_COOKIE_SECURE = SECURE
+# Cookies are HTTPS-only outside DEBUG. DJANGO_SECURE_COOKIES=false exists only for local
+# load tests over plain HTTP; never set it on a real server.
+SESSION_COOKIE_SECURE = env_bool("DJANGO_SECURE_COOKIES", SECURE)
+CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = env_bool("DJANGO_SSL_REDIRECT", SECURE)
 SECURE_REDIRECT_EXEMPT = [r"^api/health$"]
 SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "0" if DEBUG else "3600"))
+# Turn these on once every subdomain of the product domain is served over HTTPS.
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("DJANGO_HSTS_INCLUDE_SUBDOMAINS", False)
+SECURE_HSTS_PRELOAD = env_bool("DJANGO_HSTS_PRELOAD", False)
+# Content-Security-Policy starts report-only; see apps/core/security.py.
+CSP_ENFORCE = env_bool("CSP_ENFORCE", False)
+# Platform admin: password plus an authenticator-app code (django-otp).
+OTP_TOTP_ISSUER = "Photo Selection admin"
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "same-origin"
 X_FRAME_OPTIONS = "DENY"
@@ -148,11 +166,23 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    # Per account (any IP) and per IP (any account). THROTTLE_SCALE multiplies every
+    # limit, for load tests only.
     "DEFAULT_THROTTLE_RATES": {
-        "login": os.environ.get("THROTTLE_LOGIN", "10/min"),
-        "signup": os.environ.get("THROTTLE_SIGNUP", "10/hour"),
-        "password_reset": os.environ.get("THROTTLE_PASSWORD_RESET", "5/hour"),
+        scope: f"{int(count) * int(os.environ.get('THROTTLE_SCALE', '1'))}/{period}"
+        for scope, (count, period) in {
+            "login_account": (20, "hour"),
+            "login_ip": (30, "min"),
+            "client_login_account": (30, "hour"),
+            "client_login_ip": (30, "min"),
+            "signup_ip": (10, "hour"),
+            "password_reset_account": (5, "hour"),
+            "password_reset_ip": (20, "hour"),
+        }.items()
     },
+    # Hosting platforms add one proxy hop; the client IP is the last X-Forwarded-For entry.
+    # A value the client sends itself is ignored. Set to the real number of proxies.
+    "NUM_PROXIES": int(os.environ.get("NUM_PROXIES", "1")),
     "UNAUTHENTICATED_USER": "django.contrib.auth.models.AnonymousUser",
 }
 

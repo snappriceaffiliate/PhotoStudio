@@ -1,10 +1,14 @@
 from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path, re_path
+from django_otp.admin import OTPAdminSite
 from rest_framework.routers import SimpleRouter
 
 from apps.core.views import health, spa
 from apps.events.views import AlbumViewSet, EventViewSet
+
+# The Django admin (platform staff only) requires an authenticator-app code at login.
+admin.site.__class__ = OTPAdminSite
 
 router = SimpleRouter(trailing_slash=False)
 router.register("events", EventViewSet, basename="event")

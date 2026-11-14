@@ -53,7 +53,8 @@ The Sprint 0 spike page is at http://localhost:5173/dev/spikes (development only
 ## Deploying
 
 See [docs/deployment.md](docs/deployment.md) for what hosting needs, the environment variables and
-the first-deploy checklist.
+the first-deploy checklist, [docs/security.md](docs/security.md) for the security model, and
+[docs/runbook.md](docs/runbook.md) for backups, load tests and incidents.
 
 ## Tests and checks
 
@@ -91,7 +92,9 @@ frontend/           React app (TypeScript, Vite, React Router)
   src/compression/  RAW preview extraction, WebP compression to 100 KB, worker pool
   src/api/          API client (session cookie and CSRF)
 docker/             Dockerfile (dev and production targets), local DB role, SeaweedFS, R2 CORS template
-docs/               deployment guide
+docs/               deployment guide, security notes, operations runbook
+scripts/            database backup and restore drill
+loadtest/           Locust load test
 ```
 
 ## Sprint 0 spikes

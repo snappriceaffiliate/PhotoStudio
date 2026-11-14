@@ -41,6 +41,8 @@ app role: it must return `false`.
 2. Create an API token with Object Read & Write on that bucket only.
 3. Add a CORS rule so browsers can upload straight to the bucket. Start from
    `docker/r2-cors.json` and replace the origin with the app's real address.
+4. Add a lifecycle rule that deletes objects under the `incoming/` prefix after 1 day. Browsers
+   upload there first; checked images are copied to their final place.
 
 ## Razorpay setup
 
@@ -90,7 +92,11 @@ needs a new Razorpay plan; existing subscribers stay on the old one.
 | `TRIAL_DAYS` | `30` | Optional |
 | `SENTRY_DSN`, `SENTRY_ENVIRONMENT` | from Sentry; `staging` or `production` | Recommended |
 | `DJANGO_HSTS_SECONDS` | `3600` at first, `31536000` once HTTPS is stable | Optional |
+| `NUM_PROXIES` | `1` (proxies in front of the app) | Yes; wrong values break rate limits |
+| `CSP_ENFORCE` | `false` until checked on staging, then `true` | Recommended |
+| `DJANGO_HSTS_INCLUDE_SUBDOMAINS`, `DJANGO_HSTS_PRELOAD` | `true` once every subdomain is HTTPS-only | Optional |
 | `SPIKES_ENABLED` | leave unset | Never in production |
+| `DJANGO_SECURE_COOKIES` | leave unset | Never in production (local load tests only) |
 
 Staging only: `ALLOW_DEMO_SEED=true` and `DEMO_PASSWORD` let `python manage.py seed_demo` create
 demo studios.
@@ -102,7 +108,8 @@ demo studios.
 - [ ] Environment variables set on both the web and worker services
 - [ ] Release command runs migrations
 - [ ] `https://<domain>/api/health` returns `{"status": "ok", "database": "ok"}`
-- [ ] Create the first platform admin: `python manage.py createsuperuser`
+- [ ] Create the first platform admin: `python manage.py createsuperuser`, then `python manage.py setup_admin_2fa <email>`
 - [ ] Sign up a test studio, receive the verification email, and log in
 - [ ] Razorpay webhook set up and `sync_razorpay_plans` run
 - [ ] Sentry receives a test error
+- [ ] Work through the "Before going live" list in `docs/security.md`

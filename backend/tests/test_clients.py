@@ -89,7 +89,9 @@ def photo_ids(guest, **params):
 class TestSharing:
     def test_share_creates_login_emails_client_and_marks_event_shared(self, shared, outbox, api):
         creds = shared["creds"]
-        assert creds["username"].startswith("priya-")
+        assert (
+            creds["username"].startswith("priya-") and len(creds["username"]) == len("priya-") + 6
+        )
         assert len(creds["password"]) == 14
         to, subject, body = outbox[-1]
         assert to == "priya@example.com"
@@ -135,22 +137,24 @@ class TestSharing:
 
 
 class TestClientLogin:
-    def test_locks_after_five_wrong_passwords(self, shared):
+    def test_locks_after_five_wrong_passwords_without_revealing_it(self, shared):
         guest = client_api()
         username = shared["creds"]["username"]
-        codes = [
-            guest.json(
-                "post", "/api/v1/client/login", {"username": username, "password": "nope"}
-            ).status_code
+        wrong = [
+            guest.json("post", "/api/v1/client/login", {"username": username, "password": "nope"})
             for _ in range(5)
         ]
-        assert codes == [400] * 5
+        assert {r.status_code for r in wrong} == {400}
         locked = guest.json(
             "post",
             "/api/v1/client/login",
             {"username": username, "password": shared["creds"]["password"]},
         )
-        assert locked.status_code == 429
+        unknown = guest.json(
+            "post", "/api/v1/client/login", {"username": "nobody-zzzzzz", "password": "x"}
+        )
+        assert locked.status_code == unknown.status_code == 400
+        assert locked.json() == unknown.json() == wrong[0].json()
 
     def test_expired_gallery_refuses_login(self, shared):
         with tenancy.bypass_rls():

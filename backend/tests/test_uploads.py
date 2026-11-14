@@ -10,6 +10,8 @@ from .conftest import PASSWORD
 
 pytestmark = pytest.mark.django_db
 
+WEBP_HEAD = b"RIFF\x10\x00\x00\x00WEBPVP8 "
+
 
 @pytest.fixture
 def studio_a(api, make_studio):
@@ -27,6 +29,10 @@ def fake_storage(monkeypatch):
     deleted: list[str] = []
     monkeypatch.setattr(storage, "object_size", lambda key: objects.get(key))
     monkeypatch.setattr(storage, "delete_object", lambda key: deleted.append(key))
+    monkeypatch.setattr(storage, "read_prefix", lambda key: objects.get(f"{key}#head", WEBP_HEAD))
+    monkeypatch.setattr(
+        storage, "copy_object", lambda src, dst: objects.__setitem__(dst, objects[src])
+    )
     return {"objects": objects, "deleted": deleted}
 
 
@@ -43,8 +49,9 @@ def upload_and_confirm(api, fake_storage, upload, photo_ids, size=60_000):
     ]
     with tenancy.bypass_rls():
         for photo in Photo.objects.filter(pk__in=photo_ids):
-            fake_storage["objects"][photo.preview_key] = size
-            fake_storage["objects"][photo.thumb_key] = 20_000
+            preview, thumb = photo.incoming_keys()
+            fake_storage["objects"][preview] = size
+            fake_storage["objects"][thumb] = 20_000
     entries = [{"id": i, "width": 1600, "height": 1067, "source": "raw"} for i in photo_ids]
     return urls, api.json("post", f"/api/v1/uploads/{upload}/confirm", {"photos": entries})
 

@@ -9,18 +9,23 @@ Flow per upload run (see frontend/src/upload/uploader.ts):
 6. POST /uploads/{id}/complete               -> closes the session and returns totals
 """
 
+import secrets
+import uuid
+
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import serializers, status
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsStudioMember
 from apps.billing import entitlements
 from apps.core import storage
+from apps.core.validators import safe_relative_path
 from apps.events.models import Album, Event
 
 from .models import Photo, UploadSession
@@ -35,7 +40,7 @@ class FileEntry(serializers.Serializer):
     album_id = serializers.UUIDField(required=False, allow_null=True)
 
     def validate_relative_path(self, value):
-        value = value.replace("\\", "/").strip("/")
+        value = safe_relative_path(value.replace("\\", "/").strip("/"))
         if not value or ".." in value.split("/"):
             raise serializers.ValidationError("Invalid file path.")
         return value
@@ -60,6 +65,14 @@ class ConfirmEntry(serializers.Serializer):
 
 class ConfirmRequest(serializers.Serializer):
     photos = ConfirmEntry(many=True, allow_empty=False, max_length=PHOTOS_PER_BATCH)
+
+
+def _is_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+    except ValueError:
+        return False
+    return True
 
 
 def _event(request, event_id) -> Event:
@@ -104,7 +117,7 @@ class UploadFilesView(StudioView):
     """Registers files. Re-registering a path resumes it; READY photos are never uploaded twice."""
 
     def post(self, request, upload_id):
-        session = _session(request, upload_id)
+        session = _open_session(request, upload_id)
         entitlements.require_can_work(request.studio_id)
         data = FilesRequest(data=request.data)
         data.is_valid(raise_exception=True)
@@ -158,9 +171,19 @@ class UploadFilesView(StudioView):
         return Response({"files": [_status_entry(by_path[p]) for p in paths]})
 
 
+def _open_session(request, upload_id) -> UploadSession:
+    """An upload session that can still take files: open, and its event not archived."""
+    session = _session(request, upload_id)
+    if session.status != UploadSession.Status.OPEN or session.event.status == Event.Status.ARCHIVED:
+        raise ValidationError(
+            {"detail": "This upload has finished. Choose the folder again to continue."}
+        )
+    return session
+
+
 class UploadUrlsView(StudioView):
     def post(self, request, upload_id):
-        session = _session(request, upload_id)
+        session = _open_session(request, upload_id)
         data = PhotoIdsRequest(data=request.data)
         data.is_valid(raise_exception=True)
         photos = list(
@@ -169,48 +192,50 @@ class UploadUrlsView(StudioView):
             )
         )
         for photo in photos:
-            prefix = photo.storage_prefix()
-            photo.preview_key, photo.thumb_key = f"{prefix}/preview.webp", f"{prefix}/thumb.webp"
-        Photo.objects.bulk_update(photos, ["preview_key", "thumb_key"])
-        return Response(
-            {
-                "max_bytes": settings.MAX_IMAGE_BYTES,
-                "urls": [
-                    {
-                        "id": str(p.pk),
-                        "preview_url": storage.signed_upload_url(p.preview_key, "image/webp"),
-                        "thumb_url": storage.signed_upload_url(p.thumb_key, "image/webp"),
-                    }
-                    for p in photos
-                ],
-            }
-        )
+            photo.preview_key, photo.thumb_key = photo.final_keys()
+            photo.upload_nonce = secrets.token_hex(8)
+        Photo.objects.bulk_update(photos, ["preview_key", "thumb_key", "upload_nonce"])
+        urls = []
+        for p in photos:
+            incoming_preview, incoming_thumb = p.incoming_keys()
+            urls.append(
+                {
+                    "id": str(p.pk),
+                    "preview_url": storage.signed_upload_url(incoming_preview, "image/webp"),
+                    "thumb_url": storage.signed_upload_url(incoming_thumb, "image/webp"),
+                }
+            )
+        return Response({"max_bytes": settings.MAX_IMAGE_BYTES, "urls": urls})
 
 
 class UploadConfirmView(StudioView):
-    """Checks each stored object. Anything missing or over 100 KB is refused and deleted."""
+    """Checks each uploaded image. Anything missing, over 100 KB or not a WebP image is
+    refused and deleted; accepted images are copied to their final place."""
 
     def post(self, request, upload_id):
-        session = _session(request, upload_id)
+        session = _open_session(request, upload_id)
         data = ConfirmRequest(data=request.data)
         data.is_valid(raise_exception=True)
         entries = {e["id"]: e for e in data.validated_data["photos"]}
-        photos = Photo.objects.for_studio(request.studio_id).filter(
-            upload=session, pk__in=entries, status=Photo.Status.PENDING
+        photos = (
+            Photo.objects.for_studio(request.studio_id)
+            .filter(upload=session, pk__in=entries, status=Photo.Status.PENDING)
+            .exclude(upload_nonce="")
         )
         results = []
         for photo in photos:
             entry = entries[photo.pk]
-            sizes = [
-                storage.object_size(k) if k else None for k in (photo.preview_key, photo.thumb_key)
-            ]
+            incoming = photo.incoming_keys()
+            sizes = [storage.object_size(k) for k in incoming]
             if None in sizes:
                 photo.status, photo.failure_reason = Photo.Status.FAILED, "Upload did not arrive."
             elif max(sizes) > settings.MAX_IMAGE_BYTES:
-                for key in (photo.preview_key, photo.thumb_key):
-                    storage.delete_object(key)
                 photo.status, photo.failure_reason = Photo.Status.FAILED, "Image is over 100 KB."
+            elif not all(storage.is_webp(storage.read_prefix(k)) for k in incoming):
+                photo.status, photo.failure_reason = Photo.Status.FAILED, "Not a WebP image."
             else:
+                for source, target in zip(incoming, photo.final_keys(), strict=True):
+                    storage.copy_object(source, target)
                 photo.status, photo.failure_reason = Photo.Status.READY, ""
                 photo.preview_bytes, photo.thumb_bytes = sizes
                 photo.width, photo.height, photo.source = (
@@ -218,6 +243,10 @@ class UploadConfirmView(StudioView):
                     entry["height"],
                     entry["source"],
                 )
+            for key in incoming:
+                if storage.object_size(key) is not None:
+                    storage.delete_object(key)
+            photo.upload_nonce = ""  # the next attempt gets fresh upload URLs
             photo.save()
             results.append({**_status_entry(photo), "failure_reason": photo.failure_reason})
         return Response({"results": results})
@@ -248,6 +277,8 @@ class PhotoListView(StudioView):
             event=event, status=Photo.Status.READY
         )
         album = request.query_params.get("album")
+        if album and album != "none" and not _is_uuid(album):
+            return Response({"detail": "album must be an album ID or none."}, status=400)
         if album == "none":
             photos = photos.filter(album__isnull=True)
         elif album:

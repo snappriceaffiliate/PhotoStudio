@@ -61,6 +61,9 @@ class Photo(TenantModel):
     width = models.PositiveIntegerField(null=True, blank=True)
     height = models.PositiveIntegerField(null=True, blank=True)
     sort_order = models.PositiveIntegerField(default=0)
+    upload_nonce = models.CharField(
+        max_length=32, blank=True, help_text="Random part of the one-time incoming upload keys."
+    )
 
     class Meta:
         ordering = ["sort_order", "relative_path"]
@@ -79,3 +82,14 @@ class Photo(TenantModel):
 
     def storage_prefix(self) -> str:
         return f"studios/{self.studio_id}/events/{self.event_id}/photos/{self.pk}"
+
+    def final_keys(self) -> tuple[str, str]:
+        prefix = self.storage_prefix()
+        return f"{prefix}/preview.webp", f"{prefix}/thumb.webp"
+
+    def incoming_keys(self) -> tuple[str, str]:
+        """Where the browser uploads. Checked images are copied to the final keys, which no
+        signed upload URL can write to, so a link reused after confirming changes nothing.
+        Leftovers under incoming/ are removed by a storage lifecycle rule."""
+        base = f"incoming/{self.storage_prefix()}/{self.upload_nonce}"
+        return f"{base}/preview.webp", f"{base}/thumb.webp"

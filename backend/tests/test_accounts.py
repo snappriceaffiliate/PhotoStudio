@@ -100,10 +100,10 @@ class TestLogin:
             api.json(
                 "post", "/api/v1/auth/login", {"email": owner.email, "password": "nope"}
             ).status_code
-            for _ in range(11)
+            for _ in range(21)
         ]
-        assert codes[:10] == [400] * 10
-        assert codes[10] == 429
+        assert codes[:20] == [400] * 20  # 20 tries per account per hour
+        assert codes[20] == 429
 
 
 class TestEmailVerification:

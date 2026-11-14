@@ -70,7 +70,7 @@ class TestExports:
             )
         script = export(api, selected["event"], "script-windows").content.decode()
         assert "\r\n" in script
-        assert 'call :copy_photo "Day 1" "100%% joy"' in script
+        assert "::P|Day 1|100% joy" in script  # a data line, never a command
 
     def test_unknown_format_and_empty_selection_are_refused(self, api, shared):
         assert export(api, shared["event"], "pdf").status_code == 400

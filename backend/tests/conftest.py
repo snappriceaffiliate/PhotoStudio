@@ -1,6 +1,7 @@
 import pytest
 from django.core.cache import cache
 from django.db import connection
+from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.billing.models import Plan, Subscription
@@ -15,6 +16,11 @@ def _plain_http(settings):
     """The test client speaks plain HTTP. Outside DEBUG (as in CI) the production
     setting would redirect every request to HTTPS, so switch it off for tests."""
     settings.SECURE_SSL_REDIRECT = False
+    # Admin pages need collected static files only in the production image.
+    settings.STORAGES = {
+        **settings.STORAGES,
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
 
 
 @pytest.fixture(autouse=True)
@@ -37,6 +43,7 @@ def make_studio(db):
                 full_name=f"Owner {slug}",
                 studio=studio,
                 role=User.Role.OWNER,
+                email_verified_at=timezone.now(),
             )
             # Test studios are on the top plan so plan limits don't get in the way;
             # tests/test_billing.py covers trials and limits.

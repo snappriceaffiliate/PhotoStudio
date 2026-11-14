@@ -2,6 +2,8 @@ from django.contrib.auth import password_validation
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
+from apps.core.validators import single_line
+
 from .models import User
 
 
@@ -21,8 +23,8 @@ class MeSerializer(serializers.ModelSerializer):
 
 
 class SignupSerializer(serializers.Serializer):
-    studio_name = serializers.CharField(max_length=200)
-    full_name = serializers.CharField(max_length=150)
+    studio_name = serializers.CharField(max_length=200, validators=[single_line])
+    full_name = serializers.CharField(max_length=150, validators=[single_line])
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)
 
@@ -84,7 +86,7 @@ class StaffSerializer(serializers.ModelSerializer):
 
 
 class StaffInviteSerializer(serializers.Serializer):
-    full_name = serializers.CharField(max_length=150)
+    full_name = serializers.CharField(max_length=150, validators=[single_line])
     email = serializers.EmailField()
 
     def validate_email(self, value):

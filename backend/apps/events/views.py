@@ -4,6 +4,7 @@ from rest_framework.response import Response
 
 from apps.accounts.permissions import IsStudioMember
 from apps.billing import entitlements
+from apps.core.validators import single_line
 
 from .models import Album, Event
 
@@ -27,6 +28,12 @@ class EventSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "status", "created_at", "updated_at"]
+
+    def validate_title(self, value):
+        return single_line(value)
+
+    def validate_watermark_text(self, value):
+        return single_line(value)
 
     def validate(self, attrs):
         enabled = attrs.get("watermark_enabled", getattr(self.instance, "watermark_enabled", False))
@@ -62,6 +69,9 @@ class AlbumSerializer(serializers.ModelSerializer):
         model = Album
         fields = ["id", "event", "name", "sort_order", "photo_count", "created_at"]
         read_only_fields = ["id", "event", "created_at"]
+
+    def validate_name(self, value):
+        return single_line(value)
 
 
 class AlbumViewSet(viewsets.ModelViewSet):

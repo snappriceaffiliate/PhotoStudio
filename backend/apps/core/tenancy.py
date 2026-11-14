@@ -113,8 +113,12 @@ class TenantMiddleware:
             studio_id = request.session.get("client_studio_id")
         else:
             studio_id = getattr(user, "studio_id", None) if user.is_authenticated else None
+        # Platform staff see every studio in the admin, but only after the second login step.
         platform_admin = (
-            user.is_authenticated and user.is_staff and request.path.startswith("/admin/")
+            user.is_authenticated
+            and user.is_staff
+            and getattr(user, "is_verified", lambda: False)()
+            and request.path.startswith("/admin/")
         )
         request.studio_id = studio_id
         set_current_studio(studio_id)

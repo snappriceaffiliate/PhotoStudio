@@ -128,6 +128,11 @@ class Subscription(TenantModel):
                 return lapsed(self.trial_ends_at, "Your free trial has ended.")
             return Access("trial", True, True, "Free trial", self.trial_ends_at)
         if self.status == self.Status.ACTIVE:
+            # Without a renewal webhook, a paid period still runs out (after the grace days).
+            if self.current_period_end and now >= self.current_period_end + grace:
+                return lapsed(
+                    self.current_period_end + grace, "Your subscription payment did not go through."
+                )
             if self.cancel_at_period_end and self.current_period_end:
                 return Access(
                     "ending",
@@ -161,6 +166,13 @@ class Subscription(TenantModel):
                 self.current_period_end,
             )
         return lapsed(self.current_period_end, "Your subscription has ended.")
+
+
+class VerifiedPayment(TenantModel):
+    """Each Checkout payment accepted once; a replayed confirmation is refused."""
+
+    payment_id = models.CharField(max_length=60, unique=True)
+    razorpay_subscription_id = models.CharField(max_length=40)
 
 
 class WebhookEvent(TimestampedModel):

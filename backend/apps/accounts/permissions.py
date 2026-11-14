@@ -1,3 +1,4 @@
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission
 from rest_framework.throttling import SimpleRateThrottle
 
@@ -15,30 +16,62 @@ class IsStudioOwner(IsStudioMember):
         return super().has_permission(request, view) and request.user.is_owner
 
 
-class EmailAndIpThrottle(SimpleRateThrottle):
-    """Limits attempts per email address and per IP address together.
+class FieldThrottle(SimpleRateThrottle):
+    """Counts attempts per value of one request field (an email or a username), across all
+    IP addresses, so rotating addresses does not give more guesses at one account."""
 
-    Set `scope` on a subclass. Each request counts against both keys, so neither
-    guessing many passwords for one account nor many accounts from one IP gets far.
-    """
+    field = "email"
 
     def get_cache_key(self, request, view):
-        email = (
-            str(request.data.get("email", "")).strip().lower() if hasattr(request, "data") else ""
+        value = (
+            str(request.data.get(self.field, "")).strip().lower()
+            if hasattr(request, "data")
+            else ""
         )
-        return self.cache_format % {
-            "scope": self.scope,
-            "ident": f"{email}|{self.get_ident(request)}",
-        }
+        if not value:
+            return None
+        return self.cache_format % {"scope": self.scope, "ident": value}
 
 
-class LoginThrottle(EmailAndIpThrottle):
-    scope = "login"
+class IpThrottle(SimpleRateThrottle):
+    """Counts attempts per client IP address, across all accounts. The address comes from
+    the hosting proxy's X-Forwarded-For entry (REST_FRAMEWORK NUM_PROXIES), not from the
+    client, so it cannot be forged."""
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
 
 
-class SignupThrottle(EmailAndIpThrottle):
-    scope = "signup"
+class LoginEmailThrottle(FieldThrottle):
+    scope = "login_account"
 
 
-class PasswordResetThrottle(EmailAndIpThrottle):
-    scope = "password_reset"
+class LoginIpThrottle(IpThrottle):
+    scope = "login_ip"
+
+
+class SignupIpThrottle(IpThrottle):
+    scope = "signup_ip"
+
+
+class PasswordResetEmailThrottle(FieldThrottle):
+    scope = "password_reset_account"
+
+
+class PasswordResetIpThrottle(IpThrottle):
+    scope = "password_reset_ip"
+
+
+LOGIN_THROTTLES = [LoginEmailThrottle, LoginIpThrottle]
+SIGNUP_THROTTLES = [SignupIpThrottle]
+PASSWORD_THROTTLES = [PasswordResetEmailThrottle, PasswordResetIpThrottle]
+
+
+def require_verified_email(user) -> None:
+    """Sending email to other people (clients, staff) needs a confirmed address, so a
+    throwaway sign-up cannot be used to send invitations to strangers."""
+    if not user.email_verified:
+        raise PermissionDenied(
+            "Confirm your email address first, using the link we sent you. "
+            "You can send a new link from the banner at the top of the page."
+        )

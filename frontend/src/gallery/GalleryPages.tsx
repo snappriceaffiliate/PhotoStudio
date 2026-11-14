@@ -242,7 +242,7 @@ export function GalleryPage() {
             <h2 id="confirm-title">Submit {info.selected} photos?</h2>
             <p>After you submit, the studio prints these photos and you cannot change the selection yourself.</p>
             <div className="actions">
-              <button onClick={submit}>Submit</button>
+              <button onClick={submit} autoFocus>Submit</button>
               <button className="secondary" onClick={() => setConfirming(false)}>Keep choosing</button>
             </div>
           </div>
@@ -277,6 +277,14 @@ function Viewer({ photos, index, onIndex, onClose, onToggle, readOnly }: {
   const photo = photos[index];
   const [note, setNote] = useState(photo.note);
   const touchStart = useRef<number | null>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+
+  // Keyboard and screen-reader users land in the viewer, and return to the grid after.
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    closeButton.current?.focus();
+    return () => opener?.focus();
+  }, []);
 
   useEffect(() => setNote(photo.note), [photo.id, photo.note]);
 
@@ -316,7 +324,7 @@ function Viewer({ photos, index, onIndex, onClose, onToggle, readOnly }: {
     <div className="viewer" role="dialog" aria-modal="true" aria-label="Photo viewer">
       <div className="viewer-top">
         <span>{index + 1} / {photos.length}</span>
-        <button className="viewer-close" onClick={onClose} aria-label="Close">✕</button>
+        <button ref={closeButton} className="viewer-close" onClick={onClose} aria-label="Close">✕</button>
       </div>
       <div className="viewer-stage" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
         <button className="viewer-nav prev" onClick={() => go(-1)} disabled={index === 0} aria-label="Previous photo">‹</button>

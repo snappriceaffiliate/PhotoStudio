@@ -58,5 +58,30 @@ def object_size(key: str) -> int | None:
     return head["ContentLength"]
 
 
+def copy_object(source: str, target: str) -> None:
+    internal_client().copy_object(
+        Bucket=settings.S3_BUCKET,
+        Key=target,
+        CopySource={"Bucket": settings.S3_BUCKET, "Key": source},
+        ContentType="image/webp",
+        MetadataDirective="REPLACE",
+    )
+
+
 def delete_object(key: str) -> None:
     internal_client().delete_object(Bucket=settings.S3_BUCKET, Key=key)
+
+
+def read_prefix(key: str, length: int = 12) -> bytes:
+    """The first bytes of a stored object, to check what kind of file it really is."""
+    try:
+        obj = internal_client().get_object(
+            Bucket=settings.S3_BUCKET, Key=key, Range=f"bytes=0-{length - 1}"
+        )
+    except ClientError:
+        return b""
+    return obj["Body"].read()
+
+
+def is_webp(prefix: bytes) -> bool:
+    return len(prefix) >= 12 and prefix[:4] == b"RIFF" and prefix[8:12] == b"WEBP"

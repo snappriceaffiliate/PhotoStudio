@@ -19,7 +19,7 @@ from apps.core.tenancy import bypass_rls
 from apps.events.models import Event
 
 from . import entitlements, razorpay
-from .models import Plan, Subscription, WebhookEvent
+from .models import Plan, Subscription, VerifiedPayment, WebhookEvent
 
 logger = logging.getLogger(__name__)
 
@@ -140,39 +140,61 @@ class VerifyRequest(serializers.Serializer):
 
 
 class VerifyView(APIView):
-    """Confirms the Checkout payment so the plan starts at once, without waiting for the webhook."""
+    """Confirms the Checkout payment so the plan starts at once, without waiting for the webhook.
+
+    Accepted only for a checkout that is still pending, only once per payment, and only when
+    Razorpay itself reports the subscription as authenticated or active.
+    """
 
     permission_classes = [IsStudioOwner]
 
     def post(self, request):
         data = VerifyRequest(data=request.data)
         data.is_valid(raise_exception=True)
+        payment_id = data.validated_data["razorpay_payment_id"]
         sub = entitlements.subscription_for(request.studio_id)
-        # Verify against the subscription ID we stored, never the one the browser sent back.
-        if not sub.razorpay_subscription_id or not razorpay.payment_signature_valid(
-            data.validated_data["razorpay_payment_id"],
-            sub.razorpay_subscription_id,
-            data.validated_data["razorpay_signature"],
-        ):
-            return Response(
-                {"detail": "The payment could not be verified."}, status=status.HTTP_400_BAD_REQUEST
-            )
-        sub.status, sub.past_due_since, sub.cancel_at_period_end = (
-            Subscription.Status.ACTIVE,
-            None,
-            False,
+        refused = Response(
+            {"detail": "The payment could not be verified."}, status=status.HTTP_400_BAD_REQUEST
         )
-        sub.plan = sub.pending_plan or sub.plan
+        # Verify against the subscription ID we stored, never the one the browser sent back.
+        if (
+            not sub.pending_plan_id
+            or not sub.razorpay_subscription_id
+            or not razorpay.payment_signature_valid(
+                payment_id, sub.razorpay_subscription_id, data.validated_data["razorpay_signature"]
+            )
+            or VerifiedPayment.objects.filter(payment_id=payment_id).exists()
+        ):
+            return refused
         try:
             remote = razorpay.fetch_subscription(sub.razorpay_subscription_id)
-            sub.current_period_end = _ts(remote.get("current_end")) or sub.current_period_end
-            sub.razorpay_status = remote.get("status", sub.razorpay_status)
         except razorpay.RazorpayError:
-            logger.warning(
-                "Could not fetch subscription %s after payment", sub.razorpay_subscription_id
+            return Response(
+                {"detail": "Payment received; your plan starts as soon as Razorpay confirms it."},
+                status=status.HTTP_202_ACCEPTED,
             )
-        sub.save()
-        record(request, "billing.payment_verified", detail=sub.plan.code if sub.plan else "")
+        if remote.get("status") not in {"authenticated", "active"}:
+            return refused
+        with transaction.atomic():
+            try:
+                with transaction.atomic():
+                    VerifiedPayment.objects.create(
+                        studio_id=request.studio_id,
+                        payment_id=payment_id,
+                        razorpay_subscription_id=sub.razorpay_subscription_id,
+                    )
+            except IntegrityError:
+                return refused
+            sub.status, sub.past_due_since, sub.cancel_at_period_end = (
+                Subscription.Status.ACTIVE,
+                None,
+                False,
+            )
+            sub.plan, sub.pending_plan = sub.pending_plan, None
+            sub.current_period_end = _ts(remote.get("current_end")) or sub.current_period_end
+            sub.razorpay_status = remote.get("status", "")
+            sub.save()
+        record(request, "billing.payment_verified", detail=sub.plan.code)
         return Response(entitlements.summary(request.studio_id))
 
 
@@ -208,6 +230,7 @@ def apply_webhook(event: str, entity: dict, sub: Subscription) -> None:
     if event in {"subscription.activated", "subscription.charged", "subscription.resumed"}:
         sub.status, sub.past_due_since = Subscription.Status.ACTIVE, None
         sub.plan = plan or sub.pending_plan or sub.plan
+        sub.pending_plan = None
     elif event in {"subscription.pending", "subscription.halted", "subscription.paused"}:
         sub.status = Subscription.Status.PAST_DUE
         sub.past_due_since = sub.past_due_since or timezone.now()

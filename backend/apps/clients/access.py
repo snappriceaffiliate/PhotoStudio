@@ -3,6 +3,7 @@
 import secrets
 
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare, salted_hmac
 from django.utils.text import slugify
 from rest_framework.permissions import BasePermission
 
@@ -11,7 +12,7 @@ from apps.events.models import Event
 
 from .models import ClientAccess
 
-SESSION_KEYS = ("client_access_id", "client_event_id", "client_studio_id")
+SESSION_KEYS = ("client_access_id", "client_event_id", "client_studio_id", "client_auth")
 # No look-alike characters (0/O, 1/l/I), so clients can type passwords from an email or a phone.
 _ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
 GALLERY_STATUSES = {Event.Status.SHARED, Event.Status.SUBMITTED}
@@ -23,16 +24,25 @@ def generate_password() -> str:
 
 
 def generate_username(client_name: str) -> str:
+    """First name plus 6 random characters (about 900 million combinations), so usernames
+    cannot be guessed and their logins cannot be locked by strangers."""
     base = slugify(client_name).split("-")[0][:20] or "client"
     with bypass_rls():  # usernames are unique across all studios
         while True:
-            candidate = f"{base}-{secrets.randbelow(9000) + 1000}"
+            suffix = "".join(secrets.choice(_ALPHABET) for _ in range(6))
+            candidate = f"{base}-{suffix}"
             if not ClientAccess.objects.filter(username=candidate).exists():
                 return candidate
 
 
+def _auth_hash(access: ClientAccess) -> str:
+    """Changes whenever the password changes, which ends sessions opened with the old one."""
+    return salted_hmac("clients.session", access.password_hash).hexdigest()
+
+
 def start_session(request, access: ClientAccess) -> None:
     request.session.cycle_key()
+    request.session["client_auth"] = _auth_hash(access)
     request.session["client_access_id"] = str(access.pk)
     request.session["client_event_id"] = str(access.event_id)
     request.session["client_studio_id"] = str(access.studio_id)
@@ -74,7 +84,12 @@ class IsClient(BasePermission):
             .filter(pk=access_id)
             .first()
         )
-        if access is None or unavailable_reason(access):
+        stored = request.session.get("client_auth", "")
+        if (
+            access is None
+            or not constant_time_compare(stored, _auth_hash(access))
+            or unavailable_reason(access)
+        ):
             end_session(request)
             return False
         request.client = access

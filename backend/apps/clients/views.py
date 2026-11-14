@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -6,15 +8,20 @@ from django.views.decorators.csrf import csrf_protect
 from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
 
 from apps.accounts.models import User
-from apps.accounts.permissions import IsStudioMember
+from apps.accounts.permissions import (
+    FieldThrottle,
+    IpThrottle,
+    IsStudioMember,
+    require_verified_email,
+)
 from apps.audit.models import record
 from apps.billing import entitlements
 from apps.core import storage
 from apps.core.tenancy import bypass_rls
+from apps.core.validators import single_line
 from apps.events.models import Album, Event
 from apps.notifications import emails
 from apps.photos.models import Photo
@@ -28,7 +35,7 @@ PAGE_SIZE_MAX = 200
 
 
 class ShareRequest(serializers.Serializer):
-    client_name = serializers.CharField(max_length=150)
+    client_name = serializers.CharField(max_length=150, validators=[single_line])
     email = serializers.EmailField()
 
 
@@ -67,6 +74,7 @@ class EventClientsView(APIView):
                 {"detail": "This event is archived."}, status=status.HTTP_400_BAD_REQUEST
             )
         entitlements.require_can_work(request.studio_id)
+        require_verified_email(request.user)
         ready = Photo.objects.for_studio(request.studio_id).filter(
             event=event, status=Photo.Status.READY
         )
@@ -115,6 +123,7 @@ class ClientAccessActionView(APIView):
             record(request, "client.access_turned_off", access.event, access.username)
             return Response(_access_data(access))
         entitlements.require_can_work(request.studio_id)
+        require_verified_email(request.user)
         password = client_access.generate_password()
         access.set_password(password)
         access.is_active, access.failed_attempts, access.locked_until = True, 0, None
@@ -170,15 +179,13 @@ class EventReopenView(APIView):
 # ---------------------------------------------------------------- client side
 
 
-class ClientLoginThrottle(SimpleRateThrottle):
-    scope = "login"
+class ClientLoginAccountThrottle(FieldThrottle):
+    scope = "client_login_account"
+    field = "username"
 
-    def get_cache_key(self, request, view):
-        username = str(request.data.get("username", "")).strip().lower()
-        return self.cache_format % {
-            "scope": "client-login",
-            "ident": f"{username}|{self.get_ident(request)}",
-        }
+
+class ClientLoginIpThrottle(IpThrottle):
+    scope = "client_login_ip"
 
 
 @method_decorator(csrf_protect, name="dispatch")
@@ -191,13 +198,19 @@ class ClientView(APIView):
 
 class ClientLoginView(ClientView):
     permission_classes = [AllowAny]
-    throttle_classes = [ClientLoginThrottle]
+    throttle_classes = [ClientLoginAccountThrottle, ClientLoginIpThrottle]
 
     def post(self, request):
         username = str(request.data.get("username", "")).strip().lower()
         password = str(request.data.get("password", ""))
+        # One answer for unknown usernames, wrong passwords and locked logins, so the
+        # response never confirms that a username exists.
         refused = Response(
-            {"detail": "Username or password is incorrect."}, status=status.HTTP_400_BAD_REQUEST
+            {
+                "detail": "Username or password is incorrect. "
+                "After 5 wrong tries, wait 15 minutes before trying again."
+            },
+            status=status.HTTP_400_BAD_REQUEST,
         )
         with bypass_rls():  # the client's studio is not known until we find the login
             access = (
@@ -205,13 +218,8 @@ class ClientLoginView(ClientView):
                 .filter(username=username)
                 .first()
             )
-            if access is None:
+            if access is None or access.is_locked:
                 return refused
-            if access.is_locked:
-                return Response(
-                    {"detail": "Too many wrong passwords. Try again in 15 minutes."},
-                    status=status.HTTP_429_TOO_MANY_REQUESTS,
-                )
             if not access.check_password(password):
                 access.record_failure()
                 return refused
@@ -274,6 +282,10 @@ class ClientPhotosView(ClientView):
         )
         album = request.query_params.get("album")
         if album:
+            try:
+                uuid.UUID(album)
+            except ValueError:
+                return Response({"detail": "album must be an album ID."}, status=400)
             photos = photos.filter(album_id=album)
         notes = dict(
             Selection.objects.for_studio(event.studio_id)

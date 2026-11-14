@@ -20,10 +20,11 @@ from apps.studios.models import Studio
 from . import tokens
 from .models import User
 from .permissions import (
+    LOGIN_THROTTLES,
+    PASSWORD_THROTTLES,
+    SIGNUP_THROTTLES,
     IsStudioOwner,
-    LoginThrottle,
-    PasswordResetThrottle,
-    SignupThrottle,
+    require_verified_email,
 )
 from .serializers import (
     EmailSerializer,
@@ -77,7 +78,7 @@ class MeView(PublicView):
 
 @method_decorator(csrf_protect, name="post")
 class SignupView(PublicView):
-    throttle_classes = [SignupThrottle]
+    throttle_classes = SIGNUP_THROTTLES
 
     def post(self, request):
         data = SignupSerializer(data=request.data)
@@ -103,7 +104,7 @@ class SignupView(PublicView):
 
 @method_decorator(csrf_protect, name="post")
 class LoginView(PublicView):
-    throttle_classes = [LoginThrottle]
+    throttle_classes = LOGIN_THROTTLES
 
     def post(self, request):
         data = LoginSerializer(data=request.data)
@@ -150,7 +151,7 @@ class VerifyEmailView(PublicView):
 
 class ResendVerificationView(APIView):
     permission_classes = [IsAuthenticated]
-    throttle_classes = [PasswordResetThrottle]
+    throttle_classes = PASSWORD_THROTTLES
 
     def post(self, request):
         if not request.user.email_verified and request.user.studio_id:
@@ -160,7 +161,7 @@ class ResendVerificationView(APIView):
 
 @method_decorator(csrf_protect, name="post")
 class PasswordResetView(PublicView):
-    throttle_classes = [PasswordResetThrottle]
+    throttle_classes = PASSWORD_THROTTLES
 
     def post(self, request):
         data = EmailSerializer(data=request.data)
@@ -179,7 +180,7 @@ class PasswordResetView(PublicView):
 class PasswordSetView(PublicView):
     """Completes a password reset or a staff invitation."""
 
-    throttle_classes = [PasswordResetThrottle]
+    throttle_classes = PASSWORD_THROTTLES
 
     def post(self, request):
         data = PasswordSetSerializer(data=request.data)
@@ -215,6 +216,7 @@ class StaffListView(APIView):
     def post(self, request):
         data = StaffInviteSerializer(data=request.data)
         data.is_valid(raise_exception=True)
+        require_verified_email(request.user)
         entitlements.check_staff_limit(request.user.studio_id)
         with transaction.atomic():
             member = User.objects.create_user(
