@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Link, Navigate, Route, Routes } from 'react-router';
 import { AuthLayout, GuestOnly, Loading, StudioLayout } from './components/Layouts';
 import { ForgotPasswordPage, LoginPage, ResetPasswordPage, SignupPage, VerifyEmailPage } from './pages/AuthPages';
+import { EventPage } from './pages/EventPage';
 import { EventsPage, StaffPage } from './pages/StudioPages';
 
 // The Sprint 0 spike page is only bundled into development builds.
@@ -18,6 +19,7 @@ export default function App() {
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route element={<StudioLayout />}>
         <Route path="/events" element={<EventsPage />} />
+        <Route path="/events/:eventId" element={<EventPage />} />
         <Route path="/staff" element={<StaffPage />} />
       </Route>
       {SpikePage && (

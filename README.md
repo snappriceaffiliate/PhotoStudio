@@ -74,11 +74,13 @@ backend/            Django project
   apps/core/        tenant scoping and row-level security, storage, health check, SPA view
   apps/studios/     Studio (the tenant)
   apps/accounts/    users (email login, Owner and Staff roles), auth and staff API
-  apps/events/      events (row-level security on)
+  apps/events/      events and albums (row-level security on)
+  apps/photos/      upload manifest, signed upload URLs, 100 KB check, photo list, clean-up job
   apps/notifications/ emails, sent as background jobs
   apps/spikes/      Sprint 0 storage spike endpoints (only when SPIKES_ENABLED=true)
 frontend/           React app (TypeScript, Vite, React Router)
-  src/pages/        sign-in, sign-up, password, email confirmation, events, staff screens
+  src/pages/        sign-in, sign-up, password, email confirmation, events, event, staff screens
+  src/upload/       folder uploader: compress, upload, confirm in batches; pause and resume
   src/auth/         logged-in user state
   src/compression/  RAW preview extraction, WebP compression to 100 KB, worker pool
   src/api/          API client (session cookie and CSRF)

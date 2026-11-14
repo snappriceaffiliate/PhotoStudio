@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "apps.studios",
     "apps.accounts",
     "apps.events",
+    "apps.photos",
     "apps.notifications",
     "apps.spikes",
 ]
@@ -174,6 +175,10 @@ S3_REGION = os.environ.get("S3_REGION", "auto")
 # Every stored preview and thumbnail must be at most 100 KB.
 MAX_IMAGE_BYTES = 100 * 1024
 SIGNED_URL_SECONDS = 15 * 60
+# Upper bound on photos in one event, until plan limits arrive with billing (Sprint 4).
+MAX_PHOTOS_PER_EVENT = int(os.environ.get("MAX_PHOTOS_PER_EVENT", "15000"))
+# Photos left PENDING longer than this (abandoned uploads) are cleaned up by a nightly job.
+STALE_UPLOAD_HOURS = 48
 
 # Sprint 0 spike endpoints. Never enable in production.
 SPIKES_ENABLED = env_bool("SPIKES_ENABLED", False)

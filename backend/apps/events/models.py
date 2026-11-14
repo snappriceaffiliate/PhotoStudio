@@ -37,3 +37,20 @@ class Event(TenantModel):
 
     def __str__(self) -> str:
         return self.title
+
+
+class Album(TenantModel):
+    """Optional grouping inside an event, for example Engagement, Wedding, Reception."""
+
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="albums")
+    name = models.CharField(max_length=120)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["event", "name"], name="album_unique_name_per_event")
+        ]
+
+    def __str__(self) -> str:
+        return self.name

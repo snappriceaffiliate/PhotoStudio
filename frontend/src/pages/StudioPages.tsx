@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { Field, FormMessage, useSubmit } from '../components/Form';
+import { STATUS_LABELS } from './EventPage';
 
 interface EventItem {
   id: string;
@@ -9,6 +11,7 @@ interface EventItem {
   event_date: string | null;
   status: string;
   selection_limit: number | null;
+  photo_count: number;
   created_at: string;
 }
 
@@ -20,14 +23,6 @@ interface StaffMember {
   is_active: boolean;
   has_password: boolean;
 }
-
-const STATUS_LABELS: Record<string, string> = {
-  draft: 'Draft',
-  uploading: 'Uploading',
-  shared: 'Shared with client',
-  submitted: 'Selection received',
-  archived: 'Archived',
-};
 
 function useList<T>(path: string) {
   const [items, setItems] = useState<T[] | null>(null);
@@ -91,18 +86,20 @@ export function EventsPage() {
       {items?.length === 0 && (
         <div className="empty">
           <h2>No events yet</h2>
-          <p>Create an event for each shoot. Uploading photos and sharing with clients come next.</p>
+          <p>Create an event for each shoot, then upload its folder of photos.</p>
         </div>
       )}
       {items && items.length > 0 && (
         <ul className="cards">
           {items.map((e) => (
             <li key={e.id} className="card-item">
-              <h3>{e.title}</h3>
+              <h3><Link to={`/events/${e.id}`} className="card-link">{e.title}</Link></h3>
               <p className="muted">
                 {e.event_date ? new Date(e.event_date).toLocaleDateString('en-IN', { dateStyle: 'medium' }) : 'No date'}
                 {' · '}
-                {e.selection_limit ? `${e.selection_limit} photos to select` : 'No selection limit'}
+                {e.photo_count} photos
+                {' · '}
+                {e.selection_limit ? `${e.selection_limit} to select` : 'No selection limit'}
               </p>
               <span className={`status status-${e.status}`}>{STATUS_LABELS[e.status] ?? e.status}</span>
             </li>
