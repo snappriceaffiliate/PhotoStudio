@@ -9,6 +9,7 @@ class ClientAccessAdmin(admin.ModelAdmin):
         "username",
         "client_name",
         "email",
+        "phone",
         "event",
         "studio",
         "is_active",

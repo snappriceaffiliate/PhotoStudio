@@ -17,7 +17,12 @@ class ClientAccess(TenantModel):
         "events.Event", on_delete=models.CASCADE, related_name="client_accesses"
     )
     client_name = models.CharField(max_length=150)
-    email = models.EmailField()
+    email = models.EmailField(blank=True)
+    phone = models.CharField(
+        max_length=16,
+        blank=True,
+        help_text="WhatsApp number with country code, digits only: 919876543210.",
+    )
     username = models.CharField(max_length=60, unique=True)
     password_hash = models.CharField(max_length=256)
     is_active = models.BooleanField(default=True)
