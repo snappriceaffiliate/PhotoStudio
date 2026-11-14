@@ -1,0 +1,82 @@
+# Local development: `docker compose up --build`
+#   App (Vite dev server):   http://localhost:5173
+#   Django API and admin:    http://localhost:8000
+#   Mailpit inbox:           http://localhost:8025
+#   Local S3 (SeaweedFS):    http://localhost:8333  (devkey / devsecret)
+
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+    target: dev
+  env_file: .env
+  volumes:
+    - ./backend:/app
+  depends_on:
+    db:
+      condition: service_healthy
+    storage:
+      condition: service_started
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: photo
+      POSTGRES_USER: photo
+      POSTGRES_PASSWORD: photo
+    ports:
+      - "5433:5432" # 5433 on the host, in case another PostgreSQL already uses 5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U photo -d photo"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  storage:
+    # S3-compatible stand-in for Cloudflare R2 (MinIO images are no longer published).
+    image: chrislusf/seaweedfs:latest
+    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -s3.allowedOrigins=http://localhost:5173
+    ports:
+      - "8333:8333"
+    volumes:
+      - storagedata:/data
+      - ./docker/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+
+  mail:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+  web:
+    <<: *backend
+    command: sh -c "python manage.py migrate --noinput && python manage.py ensure_bucket && python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8000:8000"
+
+  worker:
+    <<: *backend
+    command: sh -c "python manage.py migrate --noinput && python manage.py procrastinate worker"
+    depends_on:
+      web:
+        condition: service_started
+
+  frontend:
+    image: node:24-slim
+    working_dir: /frontend
+    command: sh -c "npm ci && npm run dev"
+    environment:
+      VITE_API_TARGET: http://web:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/frontend
+      - frontend_node_modules:/frontend/node_modules
+
+volumes:
+  pgdata:
+  storagedata:
+  frontend_node_modules:
