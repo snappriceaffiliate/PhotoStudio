@@ -42,7 +42,7 @@ def logo_url(studio: Studio) -> str | None:
 
 
 def client_branding(studio: Studio) -> dict | None:
-    """What the client gallery shows, or None for the standard Pickframe look."""
+    """What the client gallery shows, or None for the standard PickSnap look."""
     if not (studio.logo_key or studio.accent_color):
         return None
     if not entitlements.branding_allowed(studio.pk):

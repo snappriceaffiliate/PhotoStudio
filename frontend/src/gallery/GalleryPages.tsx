@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type TouchEvent } from 'react
 import { useNavigate, useSearchParams } from 'react-router';
 import { api, ApiError } from '../api/client';
 import { Field, FormMessage, useSubmit } from '../components/Form';
-import { HeartIcon } from '../components/Brand';
+import { BRAND_NAME, HeartIcon } from '../components/Brand';
 import { AuthLayout, Loading } from '../components/Layouts';
 import { brandStyle, type StudioBranding } from '../branding/brand';
 
@@ -269,7 +269,7 @@ export function GalleryPage() {
       </ul>
       <div ref={sentinel} />
       <p className="gallery-foot">
-        Gallery by {info.studio_name} · made with <a href="/" rel="noopener">Pickframe</a>
+        Gallery by {info.studio_name} · made with <a href="/" rel="noopener">{BRAND_NAME}</a>
       </p>
 
       {!submitted && (

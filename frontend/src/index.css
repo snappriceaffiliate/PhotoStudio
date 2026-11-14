@@ -379,7 +379,7 @@ figure img, .placeholder { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; 
 
 /* ---------------------------------------------------------------- studio branding */
 
-/* A studio's accent colour replaces the Pickframe teal inside its galleries. The server only
+/* A studio's accent colour replaces the PickSnap teal inside its galleries. The server only
    accepts colours with 4.5:1 contrast on white, so white button text and links stay readable. */
 .branded {
   --primary: var(--brand-accent);
