@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+backend/staticfiles/
+node_modules/
+frontend/dist/
+.DS_Store
+# RAW and photo samples stay out of the repository.
+samples/
+frontend/public/_samples/
