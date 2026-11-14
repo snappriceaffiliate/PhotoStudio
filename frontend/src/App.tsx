@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Link, Navigate, Route, Routes } from 'react-router';
 import { AuthLayout, GuestOnly, Loading, StudioLayout } from './components/Layouts';
 import { ForgotPasswordPage, LoginPage, ResetPasswordPage, SignupPage, VerifyEmailPage } from './pages/AuthPages';
+import { ClientLoginPage, GalleryPage } from './gallery/GalleryPages';
 import { EventPage } from './pages/EventPage';
 import { EventsPage, StaffPage } from './pages/StudioPages';
 
@@ -17,6 +18,8 @@ export default function App() {
       <Route path="/forgot-password" element={<GuestOnly><ForgotPasswordPage /></GuestOnly>} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="/gallery/login" element={<ClientLoginPage />} />
+      <Route path="/gallery" element={<GalleryPage />} />
       <Route element={<StudioLayout />}>
         <Route path="/events" element={<EventsPage />} />
         <Route path="/events/:eventId" element={<EventPage />} />

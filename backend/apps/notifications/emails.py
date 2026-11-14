@@ -41,3 +41,32 @@ def staff_invitation_email(user, invited_by, uid: str, token: str) -> None:
         f"Hello {user.full_name},\n\n{invited_by.full_name} added you to {user.studio.name}.\n"
         f"Choose a password to sign in:\n\n{link}\n\nThe link works for 3 days.",
     )
+
+
+def client_invitation_email(access, password: str) -> None:
+    event, studio = access.event, access.studio
+    link = f"{settings.APP_URL}/gallery/login?u={access.username}"
+    limit = (
+        f"You can choose up to {event.selection_limit} photos.\n"
+        if event.selection_limit
+        else "Choose as many photos as you like.\n"
+    )
+    expiry = f"The gallery is open until {event.expires_at:%d %B %Y}.\n" if event.expires_at else ""
+    _queue(
+        access.email,
+        f"Your photos from {studio.name} are ready to choose",
+        f"Hello {access.client_name},\n\n"
+        f"{studio.name} has shared the photos from {event.title}. Open the gallery, tap the photos "
+        "you want printed, and submit when you are done. Your choices save as you go.\n\n"
+        f"Gallery: {link}\nUsername: {access.username}\nPassword: {password}\n\n{limit}{expiry}",
+    )
+
+
+def selection_submitted_email(to: str, event, count: int, client_name: str) -> None:
+    link = f"{settings.APP_URL}/events/{event.pk}"
+    _queue(
+        to,
+        f"{client_name} submitted their selection for {event.title}",
+        f"{client_name} selected {count} photos from {event.title} and submitted the selection.\n\n"
+        f"See it here: {link}",
+    )

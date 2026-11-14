@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.events",
     "apps.photos",
+    "apps.clients",
     "apps.notifications",
     "apps.spikes",
 ]

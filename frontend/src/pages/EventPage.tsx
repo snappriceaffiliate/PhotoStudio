@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router';
 import { api } from '../api/client';
 import { Field, FormMessage, useSubmit } from '../components/Form';
 import { duplicateNames, EventUploader, toUploadFiles, type Progress, type UploadFile } from '../upload/uploader';
+import { SharePanel } from './SharePanel';
 
 export interface EventDetail {
   id: string;
@@ -104,6 +105,7 @@ export function EventPage() {
           <PhotoGrid eventId={event.id} albums={albums} version={photosVersion} />
         </div>
         <aside>
+          <SharePanel event={event} onChanged={load} />
           <SettingsPanel event={event} onSaved={setEvent} />
           <AlbumsPanel eventId={event.id} albums={albums} onChanged={load} />
         </aside>

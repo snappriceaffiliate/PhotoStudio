@@ -85,14 +85,21 @@ class TenantMiddleware:
     """Sets the current studio on the database connection for each request.
 
     Must run after AuthenticationMiddleware. Sets `request.studio_id` for views.
+    Client gallery requests (/api/v1/client/) use the studio of the client's event,
+    stored in the session at client login; everything else uses the logged-in user.
     """
+
+    CLIENT_PREFIX = "/api/v1/client/"
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
         user = request.user
-        studio_id = getattr(user, "studio_id", None) if user.is_authenticated else None
+        if request.path.startswith(self.CLIENT_PREFIX):
+            studio_id = request.session.get("client_studio_id")
+        else:
+            studio_id = getattr(user, "studio_id", None) if user.is_authenticated else None
         platform_admin = (
             user.is_authenticated and user.is_staff and request.path.startswith("/admin/")
         )

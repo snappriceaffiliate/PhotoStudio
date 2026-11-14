@@ -47,6 +47,7 @@ All demo accounts use the password `demo-pass-2026` (override with `DEMO_PASSWOR
 | Platform admin (Django admin) | `admin@platform.test` |
 
 Emails sent by the app (verification, password reset, staff invitations) appear in Mailpit.
+The client gallery is at http://localhost:5173/gallery/login; share an event from its page to get a login.
 The Sprint 0 spike page is at http://localhost:5173/dev/spikes (development only).
 
 ## Deploying
@@ -76,10 +77,12 @@ backend/            Django project
   apps/accounts/    users (email login, Owner and Staff roles), auth and staff API
   apps/events/      events and albums (row-level security on)
   apps/photos/      upload manifest, signed upload URLs, 100 KB check, photo list, clean-up job
+  apps/clients/     client logins, gallery API, selections (limit enforced), submission
   apps/notifications/ emails, sent as background jobs
   apps/spikes/      Sprint 0 storage spike endpoints (only when SPIKES_ENABLED=true)
 frontend/           React app (TypeScript, Vite, React Router)
   src/pages/        sign-in, sign-up, password, email confirmation, events, event, staff screens
+  src/gallery/      client gallery: login, grid, swipe viewer, select, notes, submit
   src/upload/       folder uploader: compress, upload, confirm in batches; pause and resume
   src/auth/         logged-in user state
   src/compression/  RAW preview extraction, WebP compression to 100 KB, worker pool
