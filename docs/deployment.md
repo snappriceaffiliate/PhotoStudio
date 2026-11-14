@@ -37,12 +37,52 @@ app role: it must return `false`.
 
 ## R2 setup
 
-1. Create the bucket (for example `photo-selection-prod`), with public access **off**.
-2. Create an API token with Object Read & Write on that bucket only.
-3. Add a CORS rule so browsers can upload straight to the bucket. Start from
-   `docker/r2-cors.json` and replace the origin with the app's real address.
-4. Add a lifecycle rule that deletes objects under the `incoming/` prefix after 1 day. Browsers
-   upload there first; checked images are copied to their final place.
+Use one bucket per environment (for example `picksnap-staging` and `picksnap-prod`). In the
+Cloudflare dashboard, under **R2 Object Storage**:
+
+1. **Create bucket.** Location: Asia-Pacific (APAC). Leave **Public access** and the
+   `r2.dev` address **off**; the app hands out signed links that expire after 15 minutes.
+2. **Settings › CORS policy.** Paste `docker/r2-cors.json`, with `AllowedOrigins` set to the
+   app's address (add `http://localhost:5173` only on a bucket used for local testing).
+3. **Settings › Object lifecycle rules.** Add a rule for the prefix `incoming/` that deletes
+   objects 1 day after upload. Browsers upload there first; checked images are copied to their
+   final place. (The app also clears abandoned uploads nightly; the rule is the safety net.)
+4. **Manage API tokens › Create API token.** Permission **Object Read & Write**, applied to
+   **this bucket only**. Copy the Access Key ID, the Secret Access Key and the S3 endpoint
+   (`https://<account_id>.r2.cloudflarestorage.com`). The secret is shown once: keep it in a
+   password manager and put it only in the hosting platform's environment settings.
+
+Then check the bucket from any machine with the app running (the key and secret are asked for
+and not shown, so they stay out of shell history):
+
+```bash
+docker compose exec web python manage.py check_storage \
+  --endpoint https://<account_id>.r2.cloudflarestorage.com --bucket <bucket> \
+  --origin https://<app address>
+```
+
+On the hosting platform, where the `S3_*` variables are already set, run
+`python manage.py check_storage --origin https://<app address>`. It checks that the server can
+write and read, that signed upload and download links work, that the bucket refuses unsigned
+links, that browsers at the origin may upload, and that the cleanup rule exists. An API token
+limited to objects may not be allowed to read the lifecycle rule; the command then says so, and
+you confirm the rule in the dashboard.
+
+## Email setup
+
+The app sends: email confirmation for new studios, password resets, staff invitations, gallery
+invitations to clients (optional; WhatsApp can replace them) and "selection received" notices
+to studios. Any service with SMTP works; Brevo or Resend free tiers cover early volume, and
+Amazon SES or Zoho ZeptoMail are cheaper at scale.
+
+1. Add the sending domain in the email service and create the DNS records it lists (SPF, DKIM,
+   and a DMARC record such as `v=DMARC1; p=none; rua=mailto:<you>`). Wait until the service
+   shows the domain as verified.
+2. Create SMTP credentials and set `EMAIL_HOST`, `EMAIL_PORT` (587), `EMAIL_HOST_USER`,
+   `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS=true` and
+   `DEFAULT_FROM_EMAIL="PickSnap <noreply@<domain>>"`.
+3. Sign up a test studio and check the confirmation email arrives in the inbox, not spam
+   (try a Gmail and an Outlook address).
 
 ## Razorpay setup
 
@@ -81,12 +121,12 @@ needs a new Razorpay plan; existing subscribers stay on the old one.
 | `DATABASE_URL` | `postgres://photo_app:...@host:5432/photo` | Yes |
 | `S3_ENDPOINT_INTERNAL` | `https://<account_id>.r2.cloudflarestorage.com` | Yes |
 | `S3_ENDPOINT_PUBLIC` | same as above | Yes |
-| `S3_BUCKET` | `photo-selection-prod` | Yes |
+| `S3_BUCKET` | `picksnap-prod` | Yes |
 | `S3_ACCESS_KEY` / `S3_SECRET_KEY` | from the R2 API token | Yes |
 | `S3_REGION` | `auto` | Yes |
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` | from the email service | Yes |
 | `EMAIL_USE_TLS` | `true` | Yes |
-| `DEFAULT_FROM_EMAIL` | `Your Product <noreply@yourproduct.in>` | Yes |
+| `DEFAULT_FROM_EMAIL` | `PickSnap <noreply@yourdomain>` | Yes |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | from Razorpay API keys (test or live) | For payments |
 | `RAZORPAY_WEBHOOK_SECRET` | the secret you set on the webhook | For payments |
 | `TRIAL_DAYS` | `30` | Optional |
@@ -104,7 +144,7 @@ demo studios.
 ## First deploy checklist
 
 - [ ] Database created with a non-superuser app role
-- [ ] R2 bucket private, API token scoped to it, CORS rule set to the app origin
+- [ ] R2 bucket private, API token scoped to it, CORS rule set to the app origin, and `python manage.py check_storage --origin https://<domain>` passes
 - [ ] Environment variables set on both the web and worker services
 - [ ] Release command runs migrations
 - [ ] `https://<domain>/api/health` returns `{"status": "ok", "database": "ok"}`
