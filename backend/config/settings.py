@@ -141,7 +141,7 @@ SECURE_HSTS_PRELOAD = env_bool("DJANGO_HSTS_PRELOAD", False)
 # Content-Security-Policy starts report-only; see apps/core/security.py.
 CSP_ENFORCE = env_bool("CSP_ENFORCE", False)
 # Platform admin: password plus an authenticator-app code (django-otp).
-OTP_TOTP_ISSUER = "Photo Selection admin"
+OTP_TOTP_ISSUER = "Pickframe admin"
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "same-origin"
 X_FRAME_OPTIONS = "DENY"
@@ -193,7 +193,7 @@ EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "1025"))
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", False)
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "Photo Selection <noreply@localhost>")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "Pickframe <noreply@localhost>")
 
 # Object storage: SeaweedFS locally, Cloudflare R2 in staging and production.
 # The internal endpoint is used by the server; the public endpoint is the host

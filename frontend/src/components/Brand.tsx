@@ -3,7 +3,7 @@
  * heart: the moment a client chooses a photo. Product name lives in one place: BRAND_NAME.
  */
 
-export const BRAND_NAME = 'Photo Selection';
+export const BRAND_NAME = 'Pickframe';
 
 export function LogoMark({ size = 32 }: { size?: number }) {
   return (

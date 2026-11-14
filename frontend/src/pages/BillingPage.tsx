@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { FormMessage } from '../components/Form';
+import { BRAND_NAME } from '../components/Brand';
 
 interface PlanInfo {
   code: string;
@@ -88,10 +89,10 @@ export function BillingPage() {
       const checkout = new window.Razorpay!({
         key: start.key_id,
         subscription_id: start.subscription_id,
-        name: 'Photo Selection',
+        name: BRAND_NAME,
         description: `${plan.name} plan for ${start.studio_name}`,
         prefill: start.prefill,
-        theme: { color: '#2563eb' },
+        theme: { color: '#0e5e5a' },
         handler: async (response: RazorpayResponse) => {
           try {
             await api('/billing/verify', { method: 'POST', body: response });
