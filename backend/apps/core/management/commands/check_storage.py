@@ -52,8 +52,18 @@ class Command(BaseCommand):
         endpoint = options["endpoint"] or settings.S3_ENDPOINT_INTERNAL
         bucket = options["bucket"] or settings.S3_BUCKET
         if options["endpoint"]:
-            access_key = getpass.getpass("Access Key ID: ").strip()
-            secret_key = getpass.getpass("Secret Access Key: ").strip()
+            # The key ID is not secret, so it is shown as typed; the secret is hidden.
+            access_key = input("Access Key ID (32 characters, shown): ").strip()
+            if len(access_key) != 32:
+                raise CommandError(
+                    f"The Access Key ID should be 32 characters; got {len(access_key)}. Run again."
+                )
+            secret_key = getpass.getpass("Secret Access Key (64 characters, hidden): ").strip()
+            if len(secret_key) != 64:
+                raise CommandError(
+                    f"The Secret Access Key should be 64 characters; got {len(secret_key)}. "
+                    "Run again and paste it once."
+                )
         else:
             access_key, secret_key = settings.S3_ACCESS_KEY, settings.S3_SECRET_KEY
         client = boto3.client(
