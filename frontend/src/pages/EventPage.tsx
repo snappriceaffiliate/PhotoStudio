@@ -53,6 +53,28 @@ function formatDuration(seconds: number): string {
   return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
 }
 
+const STEPS = [
+  { status: 'draft', label: 'Created' },
+  { status: 'uploading', label: 'Photos uploaded' },
+  { status: 'shared', label: 'Shared with client' },
+  { status: 'submitted', label: 'Selection received' },
+  { status: 'archived', label: 'Archived' },
+];
+
+/** Where the event is in its life, so the studio always knows the next step. */
+function EventStepper({ status }: { status: string }) {
+  const current = STEPS.findIndex((s) => s.status === status);
+  return (
+    <ol className="stepper" aria-label="Event progress">
+      {STEPS.map((step, i) => (
+        <li key={step.status} className={i < current ? 'done' : i === current ? 'current' : ''} aria-current={i === current ? 'step' : undefined}>
+          {step.label}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export function EventPage() {
   const { eventId } = useParams();
   const [event, setEvent] = useState<EventDetail | null>(null);
@@ -91,6 +113,7 @@ export function EventPage() {
           </p>
         </div>
       </div>
+      <EventStepper status={event.status} />
 
       <div className="two-col">
         <div>

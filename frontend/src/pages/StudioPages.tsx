@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { Field, FormMessage, useSubmit } from '../components/Form';
+import { PhotosIcon } from '../components/Brand';
 import { STATUS_LABELS } from './EventPage';
 
 interface EventItem {
@@ -12,6 +13,8 @@ interface EventItem {
   status: string;
   selection_limit: number | null;
   photo_count: number;
+  selected_count: number;
+  cover_url: string | null;
   created_at: string;
 }
 
@@ -85,6 +88,7 @@ export function EventsPage() {
       {items === null && !error && <p className="muted">Loading events…</p>}
       {items?.length === 0 && (
         <div className="empty">
+          <PhotosIcon size={48} />
           <h2>No events yet</h2>
           <p>Create an event for each shoot, then upload its folder of photos.</p>
         </div>
@@ -93,15 +97,28 @@ export function EventsPage() {
         <ul className="cards">
           {items.map((e) => (
             <li key={e.id} className="card-item">
-              <h3><Link to={`/events/${e.id}`} className="card-link">{e.title}</Link></h3>
-              <p className="muted">
-                {e.event_date ? new Date(e.event_date).toLocaleDateString('en-IN', { dateStyle: 'medium' }) : 'No date'}
-                {' · '}
-                {e.photo_count} photos
-                {' · '}
-                {e.selection_limit ? `${e.selection_limit} to select` : 'No selection limit'}
-              </p>
-              <span className={`status status-${e.status}`}>{STATUS_LABELS[e.status] ?? e.status}</span>
+              <div className="card-cover">
+                {e.cover_url ? <img src={e.cover_url} alt="" loading="lazy" /> : <PhotosIcon size={44} />}
+              </div>
+              <div className="card-body">
+                <h3><Link to={`/events/${e.id}`} className="card-link">{e.title}</Link></h3>
+                <p className="muted">
+                  {e.event_date ? new Date(e.event_date).toLocaleDateString('en-IN', { dateStyle: 'medium' }) : 'No date'}
+                  {' · '}
+                  {e.photo_count} photos
+                </p>
+                {e.selected_count > 0 && (
+                  <>
+                    <div className="meter" aria-hidden="true">
+                      <span style={{ width: `${e.selection_limit ? Math.min(100, (e.selected_count / e.selection_limit) * 100) : 100}%` }} />
+                    </div>
+                    <p className="muted">
+                      {e.selected_count}{e.selection_limit ? ` of ${e.selection_limit}` : ''} chosen by the client
+                    </p>
+                  </>
+                )}
+                <span className={`status status-${e.status}`}>{STATUS_LABELS[e.status] ?? e.status}</span>
+              </div>
             </li>
           ))}
         </ul>

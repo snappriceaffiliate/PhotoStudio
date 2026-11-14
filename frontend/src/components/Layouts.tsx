@@ -2,13 +2,14 @@ import { useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { Logo } from './Brand';
 
 /** Centered card for sign-in, sign-up and password screens. */
 export function AuthLayout({ title, children, footer }: { title: string; children: ReactNode; footer?: ReactNode }) {
   return (
     <div className="auth-page">
+      <div className="auth-brand"><Logo size={36} /></div>
       <div className="auth-card">
-        <p className="brand">Photo Selection</p>
         <h1>{title}</h1>
         {children}
       </div>
@@ -48,6 +49,7 @@ export function StudioLayout() {
     <div className="app">
       <header className="topbar">
         <div className="topbar-inner">
+          <Link to="/events" className="logo" aria-label="Events"><Logo size={30} withName={false} /></Link>
           <Link to="/events" className="studio-name">{user.studio.name}</Link>
           <nav aria-label="Main">
             <NavLink to="/events">Events</NavLink>
