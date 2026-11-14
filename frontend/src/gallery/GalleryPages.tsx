@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type TouchEvent } from 'react
 import { useNavigate, useSearchParams } from 'react-router';
 import { api, ApiError } from '../api/client';
 import { Field, FormMessage, useSubmit } from '../components/Form';
+import { HeartIcon } from '../components/Brand';
 import { AuthLayout, Loading } from '../components/Layouts';
 
 interface GalleryInfo {
@@ -11,6 +12,7 @@ interface GalleryInfo {
   photo_count: number;
   selected: number;
   albums: { id: string; name: string }[];
+  cover_url: string | null;
 }
 
 interface GalleryPhoto {
@@ -165,21 +167,41 @@ export function GalleryPage() {
 
   return (
     <div className="gallery">
-      <header className="gallery-header">
-        <div>
-          <p className="brand">{info.studio_name}</p>
-          <h1>{info.event.title}</h1>
-        </div>
-        <button className="link" onClick={logout}>Log out</button>
-      </header>
+      {info.cover_url ? (
+        <header className="gallery-cover">
+          <img src={info.cover_url} alt="" />
+          <button className="link logout" onClick={logout}>Log out</button>
+          <div className="gallery-cover-text">
+            <p className="brand">{info.studio_name}</p>
+            <h1>{info.event.title}</h1>
+            <p>
+              {info.photo_count} photos
+              {limit ? ` · choose up to ${limit}` : ''}
+              {info.event.expires_at ? ` · open until ${new Date(info.event.expires_at).toLocaleDateString('en-IN', { dateStyle: 'medium' })}` : ''}
+            </p>
+            <button onClick={() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth' })}>
+              {submitted ? 'See your selection' : info.selected ? 'Continue choosing' : 'Start choosing'}
+            </button>
+          </div>
+        </header>
+      ) : (
+        <header className="gallery-header">
+          <div>
+            <p className="brand">{info.studio_name}</p>
+            <h1>{info.event.title}</h1>
+          </div>
+          <button className="link" onClick={logout}>Log out</button>
+        </header>
+      )}
 
+      <div id="photos" />
       {submitted ? (
-        <div className="banner good" role="status">
-          You submitted {info.selected} photos. The studio has been told. Thank you!
+        <div className="banner good" role="status" style={{ marginTop: 16 }}>
+          You submitted {info.selected} photos. {info.studio_name} has been told. Thank you!
         </div>
       ) : (
         <p className="gallery-help">
-          Tap <span aria-hidden="true">♡</span> to choose a photo, or tap a photo to see it large.
+          Tap the heart to choose a photo, or tap the photo to see it large.
           {limit ? ` You can choose up to ${limit}.` : ''} Your choices save as you go.
         </p>
       )}
@@ -201,7 +223,20 @@ export function GalleryPage() {
         )}
       </div>
 
-      {count === 0 && <p className="empty">{onlySelected ? 'No photos selected yet.' : 'No photos here.'}</p>}
+      {count === 0 && (
+        <div className="empty" style={{ margin: '12px' }}>
+          <HeartIcon size={36} />
+          {onlySelected ? (
+            <>
+              <h2>Nothing chosen yet</h2>
+              <p>Tap the heart on the photos you love. They will collect here.</p>
+              <button className="secondary" onClick={() => setOnlySelected(false)}>See all photos</button>
+            </>
+          ) : (
+            <h2>No photos here</h2>
+          )}
+        </div>
+      )}
 
       <ul className="gallery-grid">
         {photos.map((p, index) => (
@@ -216,7 +251,7 @@ export function GalleryPage() {
               onClick={() => toggle(p)}
               disabled={submitted}
             >
-              {p.selected ? '♥' : '♡'}
+              <HeartIcon filled={p.selected} />
             </button>
             {p.note && <span className="note-dot" title={p.note}>✎</span>}
           </li>
@@ -226,11 +261,18 @@ export function GalleryPage() {
 
       {!submitted && (
         <div className="submit-bar">
-          <span>
-            <strong>{info.selected}</strong>{limit ? ` of ${limit}` : ''} selected
-            {atLimit && <span className="muted"> · limit reached</span>}
-          </span>
-          <button onClick={() => setConfirming(true)} disabled={info.selected === 0}>Submit selection</button>
+          <div className="submit-count" aria-live="polite">
+            <strong>{info.selected}</strong>{limit ? ` of ${limit}` : ''} chosen
+            {limit ? (
+              <span className="muted">{atLimit ? ' · limit reached' : ` · ${limit - info.selected} left`}</span>
+            ) : null}
+            {limit ? (
+              <div className="meter" aria-hidden="true">
+                <span style={{ width: `${Math.min(100, (info.selected / limit) * 100)}%` }} />
+              </div>
+            ) : null}
+          </div>
+          <button onClick={() => setConfirming(true)} disabled={info.selected === 0}>Send selection</button>
         </div>
       )}
 
@@ -239,11 +281,14 @@ export function GalleryPage() {
       {confirming && (
         <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
           <div className="dialog">
-            <h2 id="confirm-title">Submit {info.selected} photos?</h2>
-            <p>After you submit, the studio prints these photos and you cannot change the selection yourself.</p>
+            <h2 id="confirm-title">Send {info.selected} photos to {info.studio_name}?</h2>
+            <p>
+              The studio will prepare these photos for printing. After you send, the selection is locked; to change it,
+              ask the studio to reopen it.
+            </p>
             <div className="actions">
-              <button onClick={submit} autoFocus>Submit</button>
-              <button className="secondary" onClick={() => setConfirming(false)}>Keep choosing</button>
+              <button onClick={submit}>Send selection</button>
+              <button className="secondary" onClick={() => setConfirming(false)} autoFocus>Keep choosing</button>
             </div>
           </div>
         </div>
@@ -333,7 +378,8 @@ function Viewer({ photos, index, onIndex, onClose, onToggle, readOnly }: {
       </div>
       <div className="viewer-bottom">
         <button className={photo.selected ? 'pick picked' : 'pick'} onClick={() => onToggle(photo)} disabled={readOnly} aria-pressed={photo.selected}>
-          {photo.selected ? '♥ Selected' : '♡ Select'}
+          <HeartIcon filled={photo.selected} size={20} />
+          {photo.selected ? 'Chosen' : 'Choose this photo'}
         </button>
         {photo.selected && !readOnly && (
           <form className="note-form" onSubmit={(e) => { e.preventDefault(); onToggle(photo, note); }}>

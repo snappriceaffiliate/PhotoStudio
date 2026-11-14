@@ -1,9 +1,10 @@
-from django.db.models import Count, Q
+from django.db.models import Count, OuterRef, Q, Subquery
 from rest_framework import serializers, status, viewsets
 from rest_framework.response import Response
 
 from apps.accounts.permissions import IsStudioMember
 from apps.billing import entitlements
+from apps.core import storage
 from apps.core.validators import single_line
 
 from .models import Album, Event
@@ -11,6 +12,12 @@ from .models import Album, Event
 
 class EventSerializer(serializers.ModelSerializer):
     photo_count = serializers.IntegerField(read_only=True, default=0)
+    selected_count = serializers.IntegerField(read_only=True, default=0)
+    cover_url = serializers.SerializerMethodField()
+
+    def get_cover_url(self, obj) -> str | None:
+        key = getattr(obj, "cover_key", None)
+        return storage.signed_download_url(key) if key else None
 
     class Meta:
         model = Event
@@ -24,6 +31,8 @@ class EventSerializer(serializers.ModelSerializer):
             "watermark_enabled",
             "watermark_text",
             "photo_count",
+            "selected_count",
+            "cover_url",
             "created_at",
             "updated_at",
         ]
@@ -53,8 +62,15 @@ class EventViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_queryset(self):
+        from apps.photos.models import Photo
+
+        first_photo = Photo.objects.filter(event=OuterRef("pk"), status="ready").order_by(
+            "sort_order", "relative_path"
+        )
         return Event.objects.for_studio(self.request.studio_id).annotate(
-            photo_count=Count("photos", filter=Q(photos__status="ready"))
+            photo_count=Count("photos", filter=Q(photos__status="ready"), distinct=True),
+            selected_count=Count("selections", distinct=True),
+            cover_key=Subquery(first_photo.values("thumb_key")[:1]),
         )
 
     def perform_create(self, serializer):

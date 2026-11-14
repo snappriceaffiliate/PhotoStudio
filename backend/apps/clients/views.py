@@ -259,6 +259,18 @@ class ClientLogoutView(ClientView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+def _cover_url(event) -> str | None:
+    """The event's first photo, large, for the gallery's opening screen."""
+    key = (
+        Photo.objects.for_studio(event.studio_id)
+        .filter(event=event, status=Photo.Status.READY)
+        .order_by("sort_order", "relative_path")
+        .values_list("preview_key", flat=True)
+        .first()
+    )
+    return storage.signed_download_url(key) if key else None
+
+
 class ClientMeView(ClientView):
     def get(self, request):
         event = request.client.event
@@ -274,6 +286,7 @@ class ClientMeView(ClientView):
                     "expires_at": event.expires_at,
                     "submitted_at": submission.submitted_at if submission else None,
                 },
+                "cover_url": _cover_url(event),
                 "photo_count": Photo.objects.for_studio(event.studio_id)
                 .filter(event=event, status=Photo.Status.READY)
                 .count(),
