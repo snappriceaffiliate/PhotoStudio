@@ -10,6 +10,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.audit.models import record
 from apps.notifications import emails
 from apps.studios.models import Studio
 
@@ -209,6 +210,7 @@ class StaffListView(APIView):
             )
             uid, token = tokens.make_password_link_parts(member)
             emails.staff_invitation_email(member, request.user, uid, token)
+            record(request, "staff.invited", detail=member.email, studio_id=request.user.studio_id)
         return Response(StaffSerializer(member).data, status=status.HTTP_201_CREATED)
 
 
@@ -227,4 +229,5 @@ class StaffDetailView(APIView):
         # Django refuses sessions of inactive users, so access ends on their next request.
         member.is_active = False
         member.save(update_fields=["is_active"])
+        record(request, "staff.removed", detail=member.email, studio_id=request.user.studio_id)
         return Response(status=status.HTTP_204_NO_CONTENT)

@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.models import User
 from apps.accounts.permissions import IsStudioMember
+from apps.audit.models import record
 from apps.core import storage
 from apps.core.tenancy import bypass_rls
 from apps.events.models import Album, Event
@@ -87,6 +88,7 @@ class EventClientsView(APIView):
                 event.status = Event.Status.SHARED
                 event.save(update_fields=["status", "updated_at"])
             emails.client_invitation_email(access, password)
+            record(request, "client.shared", event, f"{access.client_name} <{access.email}>")
         # The password is shown once, here, and sent in the invitation email; only its hash is kept.
         return Response(
             {**_access_data(access), "password": password}, status=status.HTTP_201_CREATED
@@ -108,12 +110,14 @@ class ClientAccessActionView(APIView):
         if action == "revoke":
             access.is_active = False
             access.save(update_fields=["is_active", "updated_at"])
+            record(request, "client.access_turned_off", access.event, access.username)
             return Response(_access_data(access))
         password = client_access.generate_password()
         access.set_password(password)
         access.is_active, access.failed_attempts, access.locked_until = True, 0, None
         access.save()
         emails.client_invitation_email(access, password)
+        record(request, "client.password_reset", access.event, access.username)
         return Response({**_access_data(access), "password": password})
 
 
@@ -156,6 +160,7 @@ class EventReopenView(APIView):
             Submission.objects.for_studio(request.studio_id).filter(event=event).delete()
             event.status = Event.Status.SHARED
             event.save(update_fields=["status", "updated_at"])
+            record(request, "selection.reopened", event)
         return Response({"status": event.status})
 
 
@@ -397,9 +402,149 @@ class ClientSubmitView(ClientView):
             )
             event.status = Event.Status.SUBMITTED
             event.save(update_fields=["status", "updated_at"])
+            record(request, "selection.submitted", event, f"{count} photos", studio_id=studio_id)
             recipients = User.objects.filter(studio_id=studio_id, is_active=True).values_list(
                 "email", flat=True
             )
             for email in recipients:
                 emails.selection_submitted_email(email, event, count, request.client.client_name)
         return Response({"submitted_at": submission.submitted_at, "photo_count": count})
+
+
+# ---------------------------------------------------------------- selection review, exports, archive
+
+
+def _selection_rows(request, event) -> list:
+    from .exports import Row
+
+    selections = (
+        Selection.objects.for_studio(request.studio_id)
+        .filter(event=event)
+        .select_related("photo", "photo__album")
+        .order_by("photo__sort_order", "photo__relative_path")
+    )
+    return [
+        (
+            s,
+            Row(
+                photo_id=str(s.photo_id),
+                relative_path=s.photo.relative_path,
+                album=s.photo.album.name if s.photo.album else "",
+                note=s.note,
+                selected_at=s.created_at,
+            ),
+        )
+        for s in selections
+    ]
+
+
+class EventSelectionView(APIView):
+    """The client's selection, for the studio to review."""
+
+    permission_classes = [IsStudioMember]
+
+    def get(self, request, event_id):
+        event = _studio_event(request, event_id)
+        results = []
+        for selection, row in _selection_rows(request, event):
+            photo = selection.photo
+            has_images = photo.status == Photo.Status.READY
+            results.append(
+                {
+                    "photo_id": row.photo_id,
+                    "relative_path": row.relative_path,
+                    "filename": row.filename,
+                    "album": row.album,
+                    "note": row.note,
+                    "selected_at": row.selected_at,
+                    "thumb_url": storage.signed_download_url(photo.thumb_key)
+                    if has_images
+                    else None,
+                    "preview_url": storage.signed_download_url(photo.preview_key)
+                    if has_images
+                    else None,
+                }
+            )
+        names = [r["filename"].lower() for r in results]
+        return Response(
+            {
+                "count": len(results),
+                "duplicate_filenames": sorted({n for n in names if names.count(n) > 1}),
+                "results": results,
+            }
+        )
+
+
+class EventExportView(APIView):
+    permission_classes = [IsStudioMember]
+
+    def get(self, request, event_id):
+        from django.http import HttpResponse
+
+        from . import exports
+
+        event = _studio_event(request, event_id)
+        # Not "format": Django REST Framework reserves that query parameter.
+        fmt = request.query_params.get("type", "csv")
+        if fmt not in exports.FORMATS:
+            return Response(
+                {"detail": f"type must be one of {sorted(exports.FORMATS)}"}, status=400
+            )
+        rows = [row for _, row in _selection_rows(request, event)]
+        if not rows:
+            return Response(
+                {"detail": "Nothing is selected yet."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        client = (
+            ClientAccess.objects.for_studio(request.studio_id)
+            .filter(event=event)
+            .values_list("client_name", flat=True)
+            .first()
+            or "the client"
+        )
+        file = exports.build(fmt, event.title, client, rows)
+        record(request, "selection.exported", event, f"{fmt}, {len(rows)} photos")
+        response = HttpResponse(file.content, content_type=file.content_type)
+        response["Content-Disposition"] = f'attachment; filename="{file.filename}"'
+        return response
+
+
+class EventArchiveView(APIView):
+    """POST /events/{id}/archive closes the gallery; /unarchive reopens it if images remain."""
+
+    permission_classes = [IsStudioMember]
+
+    def post(self, request, event_id, action):
+        if action not in {"archive", "unarchive"}:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        event = _studio_event(request, event_id)
+        if action == "archive":
+            if event.status != Event.Status.ARCHIVED:
+                event.status, event.archived_at = Event.Status.ARCHIVED, timezone.now()
+                event.save(update_fields=["status", "archived_at", "updated_at"])
+                record(request, "event.archived", event)
+        else:
+            if event.status != Event.Status.ARCHIVED:
+                return Response({"detail": "This event is not archived."}, status=400)
+            if event.photos_deleted_at:
+                return Response(
+                    {
+                        "detail": "The images of this event were already removed; it cannot be reopened."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            submitted = (
+                Submission.objects.for_studio(request.studio_id).filter(event=event).exists()
+            )
+            shared = ClientAccess.objects.for_studio(request.studio_id).filter(event=event).exists()
+            event.status = (
+                Event.Status.SUBMITTED
+                if submitted
+                else Event.Status.SHARED
+                if shared
+                else Event.Status.UPLOADING
+            )
+            event.archived_at = None
+            event.save(update_fields=["status", "archived_at", "updated_at"])
+            record(request, "event.unarchived", event)
+        return Response({"status": event.status, "archived_at": event.archived_at})

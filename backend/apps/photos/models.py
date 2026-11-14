@@ -36,6 +36,7 @@ class Photo(TenantModel):
         PENDING = "pending", "Pending"
         READY = "ready", "Ready"
         FAILED = "failed", "Failed"
+        REMOVED = "removed", "Images removed after archiving"
 
     class Source(models.TextChoices):
         RAW = "raw", "RAW embedded preview"

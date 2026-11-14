@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "apps.events",
     "apps.photos",
     "apps.clients",
+    "apps.audit",
     "apps.notifications",
     "apps.spikes",
 ]
@@ -180,6 +181,8 @@ SIGNED_URL_SECONDS = 15 * 60
 MAX_PHOTOS_PER_EVENT = int(os.environ.get("MAX_PHOTOS_PER_EVENT", "15000"))
 # Photos left PENDING longer than this (abandoned uploads) are cleaned up by a nightly job.
 STALE_UPLOAD_HOURS = 48
+# Images of archived events are deleted after this many days; the selection list is kept.
+ARCHIVE_RETENTION_DAYS = int(os.environ.get("ARCHIVE_RETENTION_DAYS", "90"))
 
 # Sprint 0 spike endpoints. Never enable in production.
 SPIKES_ENABLED = env_bool("SPIKES_ENABLED", False)

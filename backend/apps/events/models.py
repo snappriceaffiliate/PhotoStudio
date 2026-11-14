@@ -30,6 +30,10 @@ class Event(TenantModel):
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
     )
+    archived_at = models.DateTimeField(null=True, blank=True)
+    photos_deleted_at = models.DateTimeField(
+        null=True, blank=True, help_text="When the stored images were removed after archiving."
+    )
 
     class Meta:
         ordering = ["-created_at"]

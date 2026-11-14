@@ -77,7 +77,9 @@ backend/            Django project
   apps/accounts/    users (email login, Owner and Staff roles), auth and staff API
   apps/events/      events and albums (row-level security on)
   apps/photos/      upload manifest, signed upload URLs, 100 KB check, photo list, clean-up job
-  apps/clients/     client logins, gallery API, selections (limit enforced), submission
+  apps/clients/     client logins, gallery API, selections (limit enforced), submission,
+                    selection review, exports (CSV, list, Lightroom, copy scripts), archive
+  apps/audit/       append-only log of shares, submissions, exports, staff changes
   apps/notifications/ emails, sent as background jobs
   apps/spikes/      Sprint 0 storage spike endpoints (only when SPIKES_ENABLED=true)
 frontend/           React app (TypeScript, Vite, React Router)

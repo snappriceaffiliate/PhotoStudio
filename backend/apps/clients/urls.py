@@ -14,6 +14,24 @@ urlpatterns = [
         views.ClientAccessActionView.as_view(),
         name="client-access-action",
     ),
+    path(
+        "events/<uuid:event_id>/selection",
+        views.EventSelectionView.as_view(),
+        name="event-selection",
+    ),
+    path("events/<uuid:event_id>/export", views.EventExportView.as_view(), name="event-export"),
+    path(
+        "events/<uuid:event_id>/archive",
+        views.EventArchiveView.as_view(),
+        {"action": "archive"},
+        name="event-archive",
+    ),
+    path(
+        "events/<uuid:event_id>/unarchive",
+        views.EventArchiveView.as_view(),
+        {"action": "unarchive"},
+        name="event-unarchive",
+    ),
     # Client gallery
     path("client/login", views.ClientLoginView.as_view(), name="client-login"),
     path("client/logout", views.ClientLogoutView.as_view(), name="client-logout"),

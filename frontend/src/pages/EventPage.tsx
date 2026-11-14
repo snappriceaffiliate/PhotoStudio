@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router';
 import { api } from '../api/client';
 import { Field, FormMessage, useSubmit } from '../components/Form';
 import { duplicateNames, EventUploader, toUploadFiles, type Progress, type UploadFile } from '../upload/uploader';
+import { ArchivePanel, SelectionPanel } from './SelectionPanel';
 import { SharePanel } from './SharePanel';
 
 export interface EventDetail {
@@ -93,7 +94,8 @@ export function EventPage() {
 
       <div className="two-col">
         <div>
-          <UploadPanel
+          <SelectionPanel eventId={event.id} version={photosVersion} />
+          {event.status !== 'archived' && <UploadPanel
             event={event}
             albums={albums}
             onProgress={() => setPhotosVersion((v) => v + 1)}
@@ -101,13 +103,14 @@ export function EventPage() {
               void load();
               setPhotosVersion((v) => v + 1);
             }}
-          />
+          />}
           <PhotoGrid eventId={event.id} albums={albums} version={photosVersion} />
         </div>
         <aside>
-          <SharePanel event={event} onChanged={load} />
+          <SharePanel event={event} onChanged={() => { void load(); setPhotosVersion((v) => v + 1); }} />
           <SettingsPanel event={event} onSaved={setEvent} />
           <AlbumsPanel eventId={event.id} albums={albums} onChanged={load} />
+          <ArchivePanel eventId={event.id} status={event.status} onChanged={() => { void load(); setPhotosVersion((v) => v + 1); }} />
         </aside>
       </div>
     </>

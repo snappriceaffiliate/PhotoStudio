@@ -157,6 +157,13 @@ select { padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; b
 .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .center { justify-content: center; margin-top: 16px; }
 
+/* Selection panel */
+.downloads { list-style: none; padding: 0; margin: 0 0 16px; display: grid; gap: 8px; }
+.downloads li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 14px; }
+.downloads .button { min-width: 210px; text-align: center; }
+.photo-grid.small { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 6px; }
+.thumb.removed { display: grid; place-items: center; font-size: 11px; color: var(--muted); padding: 4px; word-break: break-all; }
+
 /* Share panel */
 .progress-box { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 16px; }
 .big-number { font-size: 22px; font-weight: 700; margin: 0; }

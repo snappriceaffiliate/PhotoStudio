@@ -31,3 +31,34 @@ def cleanup_stale_uploads(timestamp: int) -> int:
             removed += 1
     logger.info("Removed %s abandoned photos", removed)
     return removed
+
+
+@app.periodic(cron="45 3 * * *")  # every night at 03:45
+@app.task(name="photos.remove_archived_images", queueing_lock="photos.remove_archived_images")
+def remove_archived_images(timestamp: int) -> int:
+    """Delete stored images of events archived more than ARCHIVE_RETENTION_DAYS ago.
+
+    Photo rows, selections and notes stay, so the selection list and exports keep working.
+    """
+    from apps.events.models import Event
+
+    cutoff = timezone.now() - timedelta(days=settings.ARCHIVE_RETENTION_DAYS)
+    removed = 0
+    with bypass_rls():
+        events = Event.objects.filter(
+            status=Event.Status.ARCHIVED, archived_at__lt=cutoff, photos_deleted_at=None
+        )
+        for event in events:
+            for photo in (
+                Photo.objects.filter(event=event).exclude(status=Photo.Status.REMOVED).iterator()
+            ):
+                for key in (photo.preview_key, photo.thumb_key):
+                    if key:
+                        storage.delete_object(key)
+                photo.status, photo.preview_key, photo.thumb_key = Photo.Status.REMOVED, "", ""
+                photo.save(update_fields=["status", "preview_key", "thumb_key", "updated_at"])
+                removed += 1
+            event.photos_deleted_at = timezone.now()
+            event.save(update_fields=["photos_deleted_at", "updated_at"])
+    logger.info("Removed images of %s photos from archived events", removed)
+    return removed
