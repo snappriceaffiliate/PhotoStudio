@@ -12,6 +12,7 @@ class PlanAdmin(admin.ModelAdmin):
         "max_active_events",
         "max_photos_per_event",
         "max_staff",
+        "custom_branding",
         "razorpay_plan_id",
         "is_public",
     ]

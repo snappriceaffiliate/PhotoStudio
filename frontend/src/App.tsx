@@ -4,6 +4,7 @@ import { AuthLayout, GuestOnly, Loading, StudioLayout } from './components/Layou
 import { ForgotPasswordPage, LoginPage, ResetPasswordPage, SignupPage, VerifyEmailPage } from './pages/AuthPages';
 import { ClientLoginPage, GalleryPage } from './gallery/GalleryPages';
 import { BillingPage } from './pages/BillingPage';
+import { BrandingPage } from './pages/BrandingPage';
 import { EventPage } from './pages/EventPage';
 import { EventsPage, StaffPage } from './pages/StudioPages';
 
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/events" element={<EventsPage />} />
         <Route path="/events/:eventId" element={<EventPage />} />
         <Route path="/staff" element={<StaffPage />} />
+        <Route path="/branding" element={<BrandingPage />} />
         <Route path="/billing" element={<BillingPage />} />
       </Route>
       {SpikePage && (

@@ -55,3 +55,19 @@ export async function api<T = unknown>(path: string, options: { method?: string;
   if (!response.ok) throw new ApiError(response.status, data);
   return data as T;
 }
+
+/** POST a file as multipart form data (the browser sets the boundary header). */
+export async function apiUpload<T = unknown>(path: string, field: string, file: Blob, filename: string): Promise<T> {
+  await ensureCsrf();
+  const form = new FormData();
+  form.append(field, file, filename);
+  const response = await fetch(`/api/v1${path}`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'X-CSRFToken': csrfToken() },
+    credentials: 'same-origin',
+    body: form,
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new ApiError(response.status, data);
+  return data as T;
+}

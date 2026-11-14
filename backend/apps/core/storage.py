@@ -68,6 +68,12 @@ def copy_object(source: str, target: str) -> None:
     )
 
 
+def put_object(key: str, data: bytes, content_type: str) -> None:
+    internal_client().put_object(
+        Bucket=settings.S3_BUCKET, Key=key, Body=data, ContentType=content_type
+    )
+
+
 def delete_object(key: str) -> None:
     internal_client().delete_object(Bucket=settings.S3_BUCKET, Key=key)
 

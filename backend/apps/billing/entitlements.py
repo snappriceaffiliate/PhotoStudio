@@ -72,6 +72,19 @@ def check_staff_limit(studio_id) -> None:
         )
 
 
+def require_branding(studio_id) -> Subscription:
+    sub = require_can_work(studio_id)
+    if not sub.limits.custom_branding:
+        raise BillingBlocked(
+            f"Your {sub.limits.name} plan does not include studio branding. Choose a bigger plan."
+        )
+    return sub
+
+
+def branding_allowed(studio_id) -> bool:
+    return limits_for(studio_id).custom_branding
+
+
 def summary(studio_id) -> dict:
     sub = subscription_for(studio_id)
     access = sub.access()

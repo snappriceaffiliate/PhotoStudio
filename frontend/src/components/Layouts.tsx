@@ -54,6 +54,7 @@ export function StudioLayout() {
           <nav aria-label="Main">
             <NavLink to="/events">Events</NavLink>
             {user.role === 'owner' && <NavLink to="/staff">Staff</NavLink>}
+            {user.role === 'owner' && <NavLink to="/branding">Branding</NavLink>}
             <NavLink to="/billing">Billing</NavLink>
           </nav>
           <div className="account">
