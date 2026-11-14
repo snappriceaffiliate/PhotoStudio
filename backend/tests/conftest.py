@@ -10,6 +10,13 @@ PASSWORD = "a-strong-test-pass-91"
 
 
 @pytest.fixture(autouse=True)
+def _plain_http(settings):
+    """The test client speaks plain HTTP. Outside DEBUG (as in CI) the production
+    setting would redirect every request to HTTPS, so switch it off for tests."""
+    settings.SECURE_SSL_REDIRECT = False
+
+
+@pytest.fixture(autouse=True)
 def _clean_state(request):
     """Reset rate-limit counters and tenant settings so tests never leak into each other."""
     yield
