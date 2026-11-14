@@ -4,6 +4,7 @@ import { api, ApiError } from '../api/client';
 import { Field, FormMessage, useSubmit } from '../components/Form';
 import { HeartIcon } from '../components/Brand';
 import { AuthLayout, Loading } from '../components/Layouts';
+import { brandStyle, type StudioBranding } from '../branding/brand';
 
 interface GalleryInfo {
   client_name: string;
@@ -13,6 +14,7 @@ interface GalleryInfo {
   selected: number;
   albums: { id: string; name: string }[];
   cover_url: string | null;
+  branding: StudioBranding | null;
 }
 
 interface GalleryPhoto {
@@ -52,6 +54,14 @@ export function ClientLoginPage() {
       </form>
     </AuthLayout>
   );
+}
+
+/** The studio's logo when it has one (named for screen readers), otherwise its name. */
+function StudioMark({ info }: { info: GalleryInfo }) {
+  if (info.branding?.logo_url) {
+    return <img className="studio-logo" src={info.branding.logo_url} alt={info.studio_name} />;
+  }
+  return <p className="brand">{info.studio_name}</p>;
 }
 
 export function GalleryPage() {
@@ -166,13 +176,13 @@ export function GalleryPage() {
   const atLimit = limit !== null && info.selected >= limit;
 
   return (
-    <div className="gallery">
+    <div className={info.branding?.accent_color ? 'gallery branded' : 'gallery'} style={brandStyle(info.branding?.accent_color)}>
       {info.cover_url ? (
         <header className="gallery-cover">
           <img src={info.cover_url} alt="" />
           <button className="link logout" onClick={logout}>Log out</button>
           <div className="gallery-cover-text">
-            <p className="brand">{info.studio_name}</p>
+            <StudioMark info={info} />
             <h1>{info.event.title}</h1>
             <p>
               {info.photo_count} photos
@@ -187,7 +197,7 @@ export function GalleryPage() {
       ) : (
         <header className="gallery-header">
           <div>
-            <p className="brand">{info.studio_name}</p>
+            <StudioMark info={info} />
             <h1>{info.event.title}</h1>
           </div>
           <button className="link" onClick={logout}>Log out</button>
@@ -258,6 +268,9 @@ export function GalleryPage() {
         ))}
       </ul>
       <div ref={sentinel} />
+      <p className="gallery-foot">
+        Gallery by {info.studio_name} · made with <a href="/" rel="noopener">Pickframe</a>
+      </p>
 
       {!submitted && (
         <div className="submit-bar">

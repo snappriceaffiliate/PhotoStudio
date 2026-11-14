@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from './auth/AuthContext';
 import { ClientLoginPage, GalleryPage } from './gallery/GalleryPages';
 import { BillingPage } from './pages/BillingPage';
+import { BrandingPage } from './pages/BrandingPage';
 import { ForgotPasswordPage, LoginPage, ResetPasswordPage, SignupPage } from './pages/AuthPages';
 import { EventsPage } from './pages/StudioPages';
 
@@ -27,7 +28,9 @@ const responses: Record<string, unknown> = {
     client_name: 'Priya', studio_name: 'Lens and Light',
     event: { title: 'Wedding', selection_limit: 2, expires_at: null, submitted_at: null },
     photo_count: 2, selected: 1, albums: [{ id: 'a1', name: 'Reception' }],
+    cover_url: 'data:,', branding: { logo_url: 'data:,', accent_color: '#8A1C3B' },
   },
+  '/api/v1/studio/branding': { studio_name: 'Lens and Light', logo_url: null, accent_color: '#8A1C3B', allowed: true },
   '/api/v1/client/photos': {
     count: 2, next_page: null,
     results: [
@@ -99,6 +102,12 @@ describe('accessibility', () => {
   it('billing screen has no violations', async () => {
     const { container } = page(<BillingPage />);
     await screen.findByText('Studio');
+    expect(await violations(container)).toEqual([]);
+  });
+
+  it('branding screen has no violations', async () => {
+    const { container } = page(<BrandingPage />);
+    await screen.findByText('What clients see');
     expect(await violations(container)).toEqual([]);
   });
 

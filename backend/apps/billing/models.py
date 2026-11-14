@@ -21,6 +21,9 @@ class Plan(TimestampedModel):
     )
     max_photos_per_event = models.PositiveIntegerField()
     max_staff = models.PositiveIntegerField(help_text="Studio members, including the owner.")
+    custom_branding = models.BooleanField(
+        default=True, help_text="Studio logo and colour in client galleries."
+    )
     razorpay_plan_id = models.CharField(
         max_length=40, blank=True, help_text="Set by sync_razorpay_plans."
     )
@@ -40,8 +43,10 @@ class Limits:
     max_active_events: int | None
     max_photos_per_event: int
     max_staff: int
+    custom_branding: bool = True
 
 
+# The trial includes branding so studios can see their galleries as clients will.
 TRIAL_LIMITS = Limits("Free trial", max_active_events=1, max_photos_per_event=5000, max_staff=2)
 
 
@@ -106,7 +111,9 @@ class Subscription(TenantModel):
         if self.status == self.Status.TRIALING or self.plan is None:
             return TRIAL_LIMITS
         p = self.plan
-        return Limits(p.name, p.max_active_events, p.max_photos_per_event, p.max_staff)
+        return Limits(
+            p.name, p.max_active_events, p.max_photos_per_event, p.max_staff, p.custom_branding
+        )
 
     def access(self, now: datetime | None = None) -> Access:
         now = now or timezone.now()
