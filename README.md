@@ -74,7 +74,12 @@ docker compose exec web pytest                                    # backend test
 docker compose exec web python manage.py makemigrations --check   # no missing migrations
 cd backend && uv run ruff check . && uv run ruff format --check . # backend lint
 cd frontend && npm run lint && npm test && npm run build          # frontend
+cd frontend && npm run coverage                                   # frontend, with a coverage table
 ```
+
+There are 376 automated tests (220 backend, 156 frontend). What they cannot check, such as
+real RAW files, Safari, real phones and real payments, is listed as manual cases in the
+"PickSnap: Test Cases" document.
 
 CI runs all of these on every pull request (`.github/workflows/ci.yml`) and builds the
 production image.

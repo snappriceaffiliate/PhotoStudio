@@ -37,6 +37,8 @@ class EventSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "status", "created_at", "updated_at"]
+        # Empty means no limit; zero would make every choice fail while the client sees no limit.
+        extra_kwargs = {"selection_limit": {"min_value": 1}}
 
     def validate_title(self, value):
         return single_line(value)
