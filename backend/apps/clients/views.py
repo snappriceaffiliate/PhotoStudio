@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 from apps.accounts.models import User
 from apps.accounts.permissions import IsStudioMember
 from apps.audit.models import record
+from apps.billing import entitlements
 from apps.core import storage
 from apps.core.tenancy import bypass_rls
 from apps.events.models import Album, Event
@@ -65,6 +66,7 @@ class EventClientsView(APIView):
             return Response(
                 {"detail": "This event is archived."}, status=status.HTTP_400_BAD_REQUEST
             )
+        entitlements.require_can_work(request.studio_id)
         ready = Photo.objects.for_studio(request.studio_id).filter(
             event=event, status=Photo.Status.READY
         )
@@ -112,6 +114,7 @@ class ClientAccessActionView(APIView):
             access.save(update_fields=["is_active", "updated_at"])
             record(request, "client.access_turned_off", access.event, access.username)
             return Response(_access_data(access))
+        entitlements.require_can_work(request.studio_id)
         password = client_access.generate_password()
         access.set_password(password)
         access.is_active, access.failed_attempts, access.locked_until = True, 0, None
@@ -526,6 +529,7 @@ class EventArchiveView(APIView):
         else:
             if event.status != Event.Status.ARCHIVED:
                 return Response({"detail": "This event is not archived."}, status=400)
+            entitlements.check_event_limit(request.studio_id)
             if event.photos_deleted_at:
                 return Response(
                     {

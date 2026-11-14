@@ -3,6 +3,7 @@ from django.core.cache import cache
 from django.db import connection
 
 from apps.accounts.models import User
+from apps.billing.models import Plan, Subscription
 from apps.core import tenancy
 from apps.studios.models import Studio
 
@@ -36,6 +37,11 @@ def make_studio(db):
                 full_name=f"Owner {slug}",
                 studio=studio,
                 role=User.Role.OWNER,
+            )
+            # Test studios are on the top plan so plan limits don't get in the way;
+            # tests/test_billing.py covers trials and limits.
+            Subscription.objects.create(
+                studio=studio, status=Subscription.Status.ACTIVE, plan=Plan.objects.get(code="pro")
             )
         return studio, owner
 

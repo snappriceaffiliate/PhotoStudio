@@ -23,6 +23,7 @@ urlpatterns = [
     path("api/v1/albums/<uuid:pk>", album_detail, name="album-detail"),
     path("api/v1/", include("apps.photos.urls")),
     path("api/v1/", include("apps.clients.urls")),
+    path("api/v1/", include("apps.billing.urls")),
 ]
 
 if settings.SPIKES_ENABLED:

@@ -18,7 +18,7 @@ clients (Mumbai, or Singapore if Mumbai is not offered).
 | Domain name, for example `app.yourproduct.in` | The app address | DNS pointed at the hosting platform |
 | Transactional email service (Amazon SES, Resend or Brevo) | Verification, password and invitation emails | SMTP host, port, username, password; verified sending domain |
 | Sentry project (optional, recommended) | Error tracking | The DSN |
-| Razorpay keys | Billing (Sprint 4) | Test keys first |
+| Razorpay key ID, key secret and webhook secret | Subscriptions | Test mode first, then live mode |
 
 ## Database setup
 
@@ -41,6 +41,23 @@ app role: it must return `false`.
 2. Create an API token with Object Read & Write on that bucket only.
 3. Add a CORS rule so browsers can upload straight to the bucket. Start from
    `docker/r2-cors.json` and replace the origin with the app's real address.
+
+## Razorpay setup
+
+Do this once in test mode, check a payment end to end, then repeat in live mode for production.
+
+1. Create API keys in the Razorpay Dashboard and set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`.
+2. Create a webhook pointing to `https://<domain>/api/v1/billing/webhook` with a secret of your choice
+   (set it as `RAZORPAY_WEBHOOK_SECRET`). Subscribe it to the `subscription.*` events: authenticated,
+   activated, charged, completed, updated, pending, halted, cancelled, paused, resumed.
+3. Confirm the plan prices and limits in Django admin (Billing > Plans), then create the matching
+   Razorpay plans: `python manage.py sync_razorpay_plans`. Plan IDs differ between test and live mode,
+   so run it in each environment.
+4. Subscribe from the Billing screen with a Razorpay test card, and check in Django admin that the
+   subscription is Active and a `subscription.charged` webhook was received.
+
+Prices are monthly, in rupees, and editable in the admin. Changing a price after customers subscribe
+needs a new Razorpay plan; existing subscribers stay on the old one.
 
 ## Processes
 
@@ -68,6 +85,9 @@ app role: it must return `false`.
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` | from the email service | Yes |
 | `EMAIL_USE_TLS` | `true` | Yes |
 | `DEFAULT_FROM_EMAIL` | `Your Product <noreply@yourproduct.in>` | Yes |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | from Razorpay API keys (test or live) | For payments |
+| `RAZORPAY_WEBHOOK_SECRET` | the secret you set on the webhook | For payments |
+| `TRIAL_DAYS` | `30` | Optional |
 | `SENTRY_DSN`, `SENTRY_ENVIRONMENT` | from Sentry; `staging` or `production` | Recommended |
 | `DJANGO_HSTS_SECONDS` | `3600` at first, `31536000` once HTTPS is stable | Optional |
 | `SPIKES_ENABLED` | leave unset | Never in production |
@@ -84,4 +104,5 @@ demo studios.
 - [ ] `https://<domain>/api/health` returns `{"status": "ok", "database": "ok"}`
 - [ ] Create the first platform admin: `python manage.py createsuperuser`
 - [ ] Sign up a test studio, receive the verification email, and log in
+- [ ] Razorpay webhook set up and `sync_razorpay_plans` run
 - [ ] Sentry receives a test error

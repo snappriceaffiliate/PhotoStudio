@@ -19,6 +19,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsStudioMember
+from apps.billing import entitlements
 from apps.core import storage
 from apps.events.models import Album, Event
 
@@ -82,6 +83,7 @@ class StudioView(APIView):
 class UploadCreateView(StudioView):
     def post(self, request, event_id):
         event = _event(request, event_id)
+        entitlements.require_can_work(request.studio_id)
         if event.status == Event.Status.ARCHIVED:
             return Response(
                 {"detail": "This event is archived."}, status=status.HTTP_400_BAD_REQUEST
@@ -103,6 +105,7 @@ class UploadFilesView(StudioView):
 
     def post(self, request, upload_id):
         session = _session(request, upload_id)
+        entitlements.require_can_work(request.studio_id)
         data = FilesRequest(data=request.data)
         data.is_valid(raise_exception=True)
         entries = data.validated_data["files"]
@@ -123,9 +126,10 @@ class UploadFilesView(StudioView):
         paths = [e["relative_path"] for e in entries]
         existing = {p.relative_path: p for p in photos.filter(relative_path__in=paths)}
         new_entries = [e for e in entries if e["relative_path"] not in existing]
-        if photos.count() + len(new_entries) > settings.MAX_PHOTOS_PER_EVENT:
+        max_photos = entitlements.photo_limit(request.studio_id)
+        if photos.count() + len(new_entries) > max_photos:
             return Response(
-                {"detail": f"An event can hold at most {settings.MAX_PHOTOS_PER_EVENT} photos."},
+                {"detail": f"An event can hold at most {max_photos} photos."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

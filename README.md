@@ -42,8 +42,8 @@ All demo accounts use the password `demo-pass-2026` (override with `DEMO_PASSWOR
 
 | Account | Email |
 | --- | --- |
-| Studio 1 owner / staff | `owner@lensandlight.test` / `staff@lensandlight.test` |
-| Studio 2 owner / staff | `owner@goldenhour.test` / `staff@goldenhour.test` |
+| Studio 1 owner / staff (Studio plan) | `owner@lensandlight.test` / `staff@lensandlight.test` |
+| Studio 2 owner / staff (free trial) | `owner@goldenhour.test` / `staff@goldenhour.test` |
 | Platform admin (Django admin) | `admin@platform.test` |
 
 Emails sent by the app (verification, password reset, staff invitations) appear in Mailpit.
@@ -79,6 +79,7 @@ backend/            Django project
   apps/photos/      upload manifest, signed upload URLs, 100 KB check, photo list, clean-up job
   apps/clients/     client logins, gallery API, selections (limit enforced), submission,
                     selection review, exports (CSV, list, Lightroom, copy scripts), archive
+  apps/billing/     plans, subscriptions, trial and plan limits, Razorpay checkout and webhooks
   apps/audit/       append-only log of shares, submissions, exports, staff changes
   apps/notifications/ emails, sent as background jobs
   apps/spikes/      Sprint 0 storage spike endpoints (only when SPIKES_ENABLED=true)

@@ -12,6 +12,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.billing.models import Plan, Subscription
 from apps.core.tenancy import bypass_rls
 from apps.events.models import Event
 from apps.studios.models import Studio
@@ -51,6 +52,14 @@ class Command(BaseCommand):
                 studio, _ = Studio.objects.get_or_create(
                     slug=spec["slug"], defaults={"name": spec["name"]}
                 )
+                # Studio 1 is on a paid plan, studio 2 on a fresh trial.
+                if not Subscription.objects.filter(studio=studio).exists():
+                    if spec["slug"] == "lens-and-light":
+                        Subscription.objects.create(
+                            studio=studio, status="active", plan=Plan.objects.get(code="studio")
+                        )
+                    else:
+                        Subscription.start_trial(studio)
                 for (name, email), role in (
                     (spec["owner"], User.Role.OWNER),
                     (spec["staff"], User.Role.STAFF),

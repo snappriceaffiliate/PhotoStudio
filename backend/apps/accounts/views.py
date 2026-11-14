@@ -11,6 +11,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.audit.models import record
+from apps.billing import entitlements
+from apps.billing.models import Subscription
+from apps.core.tenancy import studio_context
 from apps.notifications import emails
 from apps.studios.models import Studio
 
@@ -35,7 +38,16 @@ from .serializers import (
 
 
 def _me(user) -> dict:
-    return {"user": MeSerializer(user).data if user.is_authenticated else None}
+    if not user.is_authenticated:
+        return {"user": None}
+    data = MeSerializer(user).data
+    if user.studio_id:
+        # Login and sign-up responses are built before the middleware knew the studio.
+        with studio_context(user.studio_id):
+            data["billing"] = entitlements.summary(user.studio_id)
+    else:
+        data["billing"] = None
+    return {"user": data}
 
 
 def _unique_slug(name: str) -> str:
@@ -82,6 +94,8 @@ class SignupView(PublicView):
                 studio=studio,
                 role=User.Role.OWNER,
             )
+            with studio_context(studio.id):
+                Subscription.start_trial(studio)
             emails.verification_email(user, tokens.make_verification_token(user))
         login(request, user)
         return Response(_me(user), status=status.HTTP_201_CREATED)
@@ -201,6 +215,7 @@ class StaffListView(APIView):
     def post(self, request):
         data = StaffInviteSerializer(data=request.data)
         data.is_valid(raise_exception=True)
+        entitlements.check_staff_limit(request.user.studio_id)
         with transaction.atomic():
             member = User.objects.create_user(
                 email=data.validated_data["email"],

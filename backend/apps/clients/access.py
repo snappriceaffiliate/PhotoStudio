@@ -52,6 +52,10 @@ def unavailable_reason(access: ClientAccess) -> str | None:
         return "This gallery has expired. Contact the studio if you still need it."
     if event.status not in GALLERY_STATUSES:
         return "This gallery is not available. Contact the studio."
+    from apps.billing.entitlements import access_for
+
+    if not access_for(access.studio_id).gallery_open:
+        return "This gallery is not available. Contact the studio."
     return None
 
 

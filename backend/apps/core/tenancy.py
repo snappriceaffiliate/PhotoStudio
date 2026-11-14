@@ -36,6 +36,12 @@ def set_bypass(enabled: bool) -> None:
     _set(BYPASS_SETTING, "on" if enabled else "")
 
 
+def _get(name: str) -> str:
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT current_setting(%s, true)", [name])
+        return cursor.fetchone()[0] or ""
+
+
 def clear() -> None:
     set_current_studio(None)
     set_bypass(False)
@@ -43,22 +49,29 @@ def clear() -> None:
 
 @contextmanager
 def studio_context(studio_id):
-    """Run a block as one studio (used by jobs and tests)."""
+    """Run a block as one studio, then restore whatever was set before.
+
+    Used by jobs and tests, and by requests that learn their studio part-way through
+    (sign-up, login) before the middleware could set it.
+    """
+    previous = _get(STUDIO_SETTING)
     set_current_studio(studio_id)
     try:
         yield
     finally:
-        set_current_studio(None)
+        _set(STUDIO_SETTING, previous)
 
 
 @contextmanager
 def bypass_rls():
-    """Run a block with RLS off: platform admin, cross-studio jobs, management commands."""
+    """Run a block with RLS off: platform admin, cross-studio jobs, management commands.
+    Nested use is safe: the previous setting is restored afterwards."""
+    previous = _get(BYPASS_SETTING)
     set_bypass(True)
     try:
         yield
     finally:
-        set_bypass(False)
+        _set(BYPASS_SETTING, previous)
 
 
 def enable_rls(table: str) -> migrations.RunSQL:

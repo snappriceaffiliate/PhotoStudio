@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "apps.photos",
     "apps.clients",
     "apps.audit",
+    "apps.billing",
     "apps.notifications",
     "apps.spikes",
 ]
@@ -183,6 +184,16 @@ MAX_PHOTOS_PER_EVENT = int(os.environ.get("MAX_PHOTOS_PER_EVENT", "15000"))
 STALE_UPLOAD_HOURS = 48
 # Images of archived events are deleted after this many days; the selection list is kept.
 ARCHIVE_RETENTION_DAYS = int(os.environ.get("ARCHIVE_RETENTION_DAYS", "90"))
+
+# Billing (Razorpay). Without keys the app runs: studios stay on their trial and the
+# billing screen says payments are not set up yet.
+RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
+RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
+RAZORPAY_API_BASE = "https://api.razorpay.com/v1"
+TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "30"))
+# After a payment problem or the end of a paid period, studios keep working this long.
+BILLING_GRACE_DAYS = 7
 
 # Sprint 0 spike endpoints. Never enable in production.
 SPIKES_ENABLED = env_bool("SPIKES_ENABLED", False)

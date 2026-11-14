@@ -3,6 +3,7 @@ from rest_framework import serializers, status, viewsets
 from rest_framework.response import Response
 
 from apps.accounts.permissions import IsStudioMember
+from apps.billing import entitlements
 
 from .models import Album, Event
 
@@ -50,6 +51,7 @@ class EventViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
+        entitlements.check_event_limit(self.request.studio_id)
         serializer.save(studio_id=self.request.studio_id, created_by=self.request.user)
 
 

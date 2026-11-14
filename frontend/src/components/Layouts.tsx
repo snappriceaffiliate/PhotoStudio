@@ -52,6 +52,7 @@ export function StudioLayout() {
           <nav aria-label="Main">
             <NavLink to="/events">Events</NavLink>
             {user.role === 'owner' && <NavLink to="/staff">Staff</NavLink>}
+            <NavLink to="/billing">Billing</NavLink>
           </nav>
           <div className="account">
             <span className="account-name">{user.full_name}</span>
@@ -73,6 +74,7 @@ export function StudioLayout() {
           {resent ? 'A new link is on its way.' : <button className="link" onClick={resend}>Send a new link</button>}
         </div>
       )}
+      <BillingBanner />
       <main className="page">
         <Outlet />
       </main>
@@ -87,4 +89,25 @@ export function GuestOnly({ children }: { children: ReactNode }) {
   if (loading) return <Loading />;
   if (user) return <Navigate to={(location.state as { from?: string } | null)?.from ?? '/events'} replace />;
   return <>{children}</>;
+}
+
+/** Trial ending, payment problems and lapsed accounts, shown on every studio screen. */
+function BillingBanner() {
+  const { user } = useAuth();
+  const billing = user?.billing;
+  if (!billing) return null;
+  const until = billing.until ? new Date(billing.until) : null;
+  const daysLeft = until ? Math.ceil((until.getTime() - Date.now()) / 86400000) : null;
+  let text = '';
+  if (billing.state === 'trial' && daysLeft !== null && daysLeft <= 7) {
+    text = `Your free trial ends in ${daysLeft} day${daysLeft === 1 ? '' : 's'}.`;
+  } else if (billing.state === 'payment_due' || billing.state === 'ending' || billing.state === 'lapsed') {
+    text = billing.message;
+  }
+  if (!text) return null;
+  return (
+    <div className={`banner ${billing.state === 'lapsed' ? 'bad' : ''}`} role="status">
+      {text} <Link to="/billing">{user?.role === 'owner' ? 'Choose a plan' : 'See billing'}</Link>
+    </div>
+  );
 }
