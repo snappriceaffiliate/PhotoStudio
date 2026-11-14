@@ -1,4 +1,7 @@
-"""Django settings. Every environment-specific value comes from environment variables."""
+"""Django settings. Every environment-specific value comes from environment variables.
+
+See docs/deployment.md for the full list and what each environment needs.
+"""
 
 import os
 from pathlib import Path
@@ -12,16 +15,17 @@ def env_bool(name: str, default: bool = False) -> bool:
     return os.environ.get(name, str(default)).lower() in {"1", "true", "yes"}
 
 
+def env_list(name: str, default: str) -> list[str]:
+    return [v.strip() for v in os.environ.get(name, default).split(",") if v.strip()]
+
+
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-insecure-key-change-me")
 DEBUG = env_bool("DJANGO_DEBUG", False)
-ALLOWED_HOSTS = [
-    h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h
-]
-CSRF_TRUSTED_ORIGINS = [
-    o
-    for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "http://localhost:5173").split(",")
-    if o
-]
+ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
+CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", "http://localhost:5173")
+
+# Public address of the app, used in links inside emails.
+APP_URL = os.environ.get("APP_URL", "http://localhost:5173").rstrip("/")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -34,6 +38,12 @@ INSTALLED_APPS = [
     "procrastinate.contrib.django",
     "apps.core",
     "apps.studios",
+    "apps.accounts",
+    "apps.events",
+    "apps.photos",
+    "apps.clients",
+    "apps.audit",
+    "apps.notifications",
     "apps.spikes",
 ]
 
@@ -44,6 +54,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "apps.core.tenancy.TenantMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -66,14 +77,24 @@ TEMPLATES = [
     },
 ]
 
+# The app must connect as a PostgreSQL role that is NOT a superuser, or row-level
+# security is silently skipped. See apps/core/tenancy.py.
 DATABASES = {
     "default": dj_database_url.config(
-        default="postgres://photo:photo@localhost:5432/photo", conn_max_age=60
+        default="postgres://photo_app:photo_app@localhost:5433/photo", conn_max_age=60
     )
 }
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Argon2 first, as the project plan requires.
+# Shared by every web container: used for rate limits. Table created by a migration.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "django_cache",
+    }
+}
+
+AUTH_USER_MODEL = "accounts.User"
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.Argon2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2PasswordHasher",
@@ -84,11 +105,27 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
+# Password reset and staff invitation links stay valid for 3 days.
+PASSWORD_RESET_TIMEOUT = 3 * 24 * 60 * 60
+EMAIL_VERIFICATION_MAX_AGE = 3 * 24 * 60 * 60
 
+SESSION_COOKIE_AGE = 30 * 24 * 60 * 60  # 30 days, renewed on use
+SESSION_SAVE_EVERY_REQUEST = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
-SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SAMESITE = "Lax"
+
+# Production hardening. The app runs behind the hosting platform's HTTPS proxy.
+SECURE = not DEBUG
+SESSION_COOKIE_SECURE = SECURE
+CSRF_COOKIE_SECURE = SECURE
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = env_bool("DJANGO_SSL_REDIRECT", SECURE)
+SECURE_REDIRECT_EXEMPT = [r"^api/health$"]
+SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "0" if DEBUG else "3600"))
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+X_FRAME_OPTIONS = "DENY"
 
 LANGUAGE_CODE = "en-in"
 TIME_ZONE = "Asia/Kolkata"
@@ -110,16 +147,22 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_THROTTLE_RATES": {
+        "login": os.environ.get("THROTTLE_LOGIN", "10/min"),
+        "signup": os.environ.get("THROTTLE_SIGNUP", "10/hour"),
+        "password_reset": os.environ.get("THROTTLE_PASSWORD_RESET", "5/hour"),
+    },
+    "UNAUTHENTICATED_USER": "django.contrib.auth.models.AnonymousUser",
 }
 
 # Email: Mailpit locally, a transactional email service over SMTP in staging and production.
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "localhost")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "1025"))
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", False)
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@localhost")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "Photo Selection <noreply@localhost>")
 
 # Object storage: SeaweedFS locally, Cloudflare R2 in staging and production.
 # The internal endpoint is used by the server; the public endpoint is the host
@@ -134,6 +177,12 @@ S3_REGION = os.environ.get("S3_REGION", "auto")
 # Every stored preview and thumbnail must be at most 100 KB.
 MAX_IMAGE_BYTES = 100 * 1024
 SIGNED_URL_SECONDS = 15 * 60
+# Upper bound on photos in one event, until plan limits arrive with billing (Sprint 4).
+MAX_PHOTOS_PER_EVENT = int(os.environ.get("MAX_PHOTOS_PER_EVENT", "15000"))
+# Photos left PENDING longer than this (abandoned uploads) are cleaned up by a nightly job.
+STALE_UPLOAD_HOURS = 48
+# Images of archived events are deleted after this many days; the selection list is kept.
+ARCHIVE_RETENTION_DAYS = int(os.environ.get("ARCHIVE_RETENTION_DAYS", "90"))
 
 # Sprint 0 spike endpoints. Never enable in production.
 SPIKES_ENABLED = env_bool("SPIKES_ENABLED", False)
@@ -144,3 +193,14 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "root": {"handlers": ["console"], "level": os.environ.get("LOG_LEVEL", "INFO")},
 }
+
+# Error tracking: set SENTRY_DSN in staging and production.
+if os.environ.get("SENTRY_DSN"):
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=os.environ["SENTRY_DSN"],
+        environment=os.environ.get("SENTRY_ENVIRONMENT", "production"),
+        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.05")),
+        send_default_pii=False,
+    )

@@ -13,6 +13,7 @@ dependencies = [
     "argon2-cffi>=23.1",
     "whitenoise>=6.7",
     "gunicorn>=23.0",
+    "sentry-sdk[django]>=2.18",
 ]
 
 [dependency-groups]
@@ -40,3 +41,7 @@ extend-exclude = ["*/migrations/*"]
 select = ["E", "F", "I", "B", "UP", "DJ"]
 # Line length is enforced by `ruff format`.
 ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Pytest fixtures shared between test modules look like redefinitions to the linter.
+"tests/*" = ["F811"]

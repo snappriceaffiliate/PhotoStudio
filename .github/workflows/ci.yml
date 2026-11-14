@@ -20,13 +20,16 @@ jobs:
           --health-cmd "pg_isready -U photo -d photo"
           --health-interval 2s --health-timeout 3s --health-retries 30
     env:
-      DATABASE_URL: postgres://photo:photo@localhost:5432/photo
+      # Tests run as a non-superuser role so PostgreSQL row-level security is really tested.
+      DATABASE_URL: postgres://photo_app:photo_app@localhost:5432/photo
       DJANGO_SECRET_KEY: ci-only
     defaults:
       run:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+      - name: Create the non-superuser app role
+        run: psql postgres://photo:photo@localhost:5432/photo -f ../docker/postgres/init.sql
       - uses: astral-sh/setup-uv@v6
         with:
           version: "0.10.11"

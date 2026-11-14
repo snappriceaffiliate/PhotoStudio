@@ -2,6 +2,7 @@
 #   App (Vite dev server):   http://localhost:5173
 #   Django API and admin:    http://localhost:8000
 #   Mailpit inbox:           http://localhost:8025
+#   PostgreSQL:              localhost:5433 (app role photo_app / photo_app)
 #   Local S3 (SeaweedFS):    http://localhost:8333  (devkey / devsecret)
 
 x-backend: &backend
@@ -29,6 +30,7 @@ services:
       - "5433:5432" # 5433 on the host, in case another PostgreSQL already uses 5432
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U photo -d photo"]
       interval: 2s
@@ -53,16 +55,22 @@ services:
 
   web:
     <<: *backend
+    # Only the web container migrates; the worker waits until it is healthy.
     command: sh -c "python manage.py migrate --noinput && python manage.py ensure_bucket && python manage.py runserver 0.0.0.0:8000"
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
 
   worker:
     <<: *backend
-    command: sh -c "python manage.py migrate --noinput && python manage.py procrastinate worker"
+    command: python manage.py procrastinate worker
     depends_on:
       web:
-        condition: service_started
+        condition: service_healthy
 
   frontend:
     image: node:24-slim
