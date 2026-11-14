@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { api, apiUpload, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { brandStyle, contrastWithWhite, isHexColour, makeLogo, MIN_CONTRAST } from '../branding/brand';
-import { HeartIcon } from '../components/Brand';
+import { BRAND_NAME, HeartIcon } from '../components/Brand';
 import { FormMessage } from '../components/Form';
 import { Loading } from '../components/Layouts';
 
@@ -18,7 +18,7 @@ const DEFAULT_ACCENT = '#0E5E5A';
 
 // Darker colours that read well on white and suit Indian studio brands.
 const SWATCHES = [
-  { name: 'Peacock (Pickframe)', hex: '#0E5E5A' },
+  { name: `Peacock (${BRAND_NAME})`, hex: '#0E5E5A' },
   { name: 'Maroon', hex: '#8A1C3B' },
   { name: 'Vermilion', hex: '#B3361B' },
   { name: 'Navy', hex: '#1F3A68' },
@@ -85,7 +85,7 @@ export function BrandingPage() {
 
   function saveColour(value: string | null) {
     run('colour', () => api<Branding>('/studio/branding', { method: 'PATCH', body: { accent_color: value } }),
-      value ? 'Colour saved.' : 'Colour reset to Pickframe teal.');
+      value ? 'Colour saved.' : `Colour reset to ${BRAND_NAME} teal.`);
     if (!value) setColour(DEFAULT_ACCENT);
   }
 
@@ -161,7 +161,7 @@ export function BrandingPage() {
                 {busy === 'colour' ? 'Saving…' : 'Save colour'}
               </button>
               {branding.accent_color && (
-                <button type="button" className="link" disabled={busy !== ''} onClick={() => saveColour(null)}>Reset to Pickframe teal</button>
+                <button type="button" className="link" disabled={busy !== ''} onClick={() => saveColour(null)}>Reset to {BRAND_NAME} teal</button>
               )}
             </div>
           </section>
@@ -181,7 +181,7 @@ export function BrandingPage() {
               <span><strong>12</strong> of 200 chosen</span>
               <span className="preview-button small">Send selection</span>
             </div>
-            <p className="brand-preview-foot">Made with Pickframe</p>
+            <p className="brand-preview-foot">Made with {BRAND_NAME}</p>
           </div>
         </section>
       </div>

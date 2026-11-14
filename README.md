@@ -1,4 +1,4 @@
-# Pickframe
+# PickSnap
 
 Studios share a shoot online; clients pick the photos to print; the studio gets the list of
 selected files. Photos are compressed in the browser so every stored preview and thumbnail is
