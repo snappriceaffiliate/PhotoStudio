@@ -44,7 +44,18 @@ All demo accounts use the password `demo-pass-2026` (override with `DEMO_PASSWOR
 | --- | --- |
 | Studio 1 owner / staff (Studio plan) | `owner@lensandlight.test` / `staff@lensandlight.test` |
 | Studio 2 owner / staff (free trial) | `owner@goldenhour.test` / `staff@goldenhour.test` |
-| Platform admin (Django admin) | `admin@platform.test` |
+| Platform admin (Django admin) | `admin@platform.test`, plus an authenticator code: run `python manage.py setup_admin_2fa admin@platform.test` first |
+
+Other local test accounts (created during development, not by `seed_demo`):
+
+| Account | Login | Password |
+| --- | --- | --- |
+| Browser Test Studio owner | `owner@browsertest.test` | the demo password |
+| Client gallery for "Priya and Arun Wedding" | username `priya-5685` at /gallery/login | the demo password |
+| Load-test studio owner (after `seed_load_test`) | `loadowner@loadtest.test` | `load-test-pass-2026` (`LOAD_TEST_PASSWORD`) |
+| Load-test client gallery | username `loadclient` | same as above |
+
+These exist only in your local database. Never use these passwords on a real server.
 
 Emails sent by the app (verification, password reset, staff invitations) appear in Mailpit.
 The client gallery is at http://localhost:5173/gallery/login; share an event from its page to get a login.

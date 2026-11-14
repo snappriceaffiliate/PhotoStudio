@@ -1,11 +1,14 @@
 import { largestEmbeddedJpeg } from './extractJpeg';
+import { fitUnderLimit } from './fitSize';
 
 export const MAX_IMAGE_BYTES = 100 * 1024;
 export const PREVIEW_LONG_EDGE = 1600;
 export const THUMB_LONG_EDGE = 400;
 const MIN_PREVIEW_LONG_EDGE = 800;
 const MIN_THUMB_LONG_EDGE = 200;
-const QUALITIES = [0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5, 0.45, 0.4, 0.35];
+// Below these WebP qualities fine detail starts to smear; shrink the image a little instead.
+const PREVIEW_QUALITY_FLOOR = 0.55;
+const THUMB_QUALITY_FLOOR = 0.45;
 
 export const RAW_EXTENSIONS = ['cr2', 'cr3', 'nef', 'nrw', 'arw', 'srf', 'sr2', 'raf', 'orf', 'rw2', 'dng', 'pef', 'srw'];
 export const JPEG_EXTENSIONS = ['jpg', 'jpeg'];
@@ -76,23 +79,31 @@ function draw(bitmap: ImageBitmap, longEdge: number, watermark?: string): Offscr
   return canvas;
 }
 
-/** Encode as WebP at the highest quality that fits the limit, shrinking only if it must. */
+/** Encode as WebP under the byte limit, preferring a slightly smaller image to heavy
+ * compression artefacts (see fitSize.ts for the search). */
 async function encodeUnder(
   bitmap: ImageBitmap,
   longEdge: number,
   minLongEdge: number,
   maxBytes: number,
+  qualityFloor: number,
   watermark?: string,
 ): Promise<EncodedImage> {
-  for (let edge = longEdge; edge >= minLongEdge; edge = Math.round(edge * 0.85)) {
-    const canvas = draw(bitmap, edge, watermark);
-    for (const quality of QUALITIES) {
+  const canvases = new Map<number, OffscreenCanvas>();
+  const fit = await fitUnderLimit<{ blob: Blob; width: number; height: number }>(
+    async (edge, quality) => {
+      let canvas = canvases.get(edge);
+      if (!canvas) {
+        canvas = draw(bitmap, edge, watermark);
+        canvases.set(edge, canvas);
+      }
       const blob = await canvas.convertToBlob({ type: 'image/webp', quality });
       if (blob.type !== 'image/webp') throw new Error('This browser cannot encode WebP');
-      if (blob.size <= maxBytes) return { blob, width: canvas.width, height: canvas.height, quality };
-    }
-  }
-  throw new Error(`Could not fit the image under ${maxBytes} bytes`);
+      return { size: blob.size, result: { blob, width: canvas.width, height: canvas.height } };
+    },
+    { maxBytes, longEdge, minLongEdge, qualityFloor },
+  );
+  return { ...fit.result, quality: fit.quality };
 }
 
 export async function compressFile(file: File, path: string, options: CompressOptions = {}): Promise<CompressResult> {
@@ -100,8 +111,8 @@ export async function compressFile(file: File, path: string, options: CompressOp
   const ext = extensionOf(file.name);
   const { bitmap, source } = await decode(file, ext);
   try {
-    const preview = await encodeUnder(bitmap, PREVIEW_LONG_EDGE, MIN_PREVIEW_LONG_EDGE, MAX_IMAGE_BYTES, options.watermark);
-    const thumb = await encodeUnder(bitmap, THUMB_LONG_EDGE, MIN_THUMB_LONG_EDGE, MAX_IMAGE_BYTES);
+    const preview = await encodeUnder(bitmap, PREVIEW_LONG_EDGE, MIN_PREVIEW_LONG_EDGE, MAX_IMAGE_BYTES, PREVIEW_QUALITY_FLOOR, options.watermark);
+    const thumb = await encodeUnder(bitmap, THUMB_LONG_EDGE, MIN_THUMB_LONG_EDGE, MAX_IMAGE_BYTES, THUMB_QUALITY_FLOOR);
     return {
       name: file.name,
       path,
