@@ -22,10 +22,37 @@ docker compose up --build
 | Django API and admin | http://localhost:8000 |
 | Email inbox (Mailpit) | http://localhost:8025 |
 | Local S3 storage (SeaweedFS) | http://localhost:8333, keys `devkey` / `devsecret` |
-| PostgreSQL | localhost:5433, user / password / db `photo` |
+| PostgreSQL | localhost:5433, database `photo`; app role `photo_app` / `photo_app` |
 
 The web container runs migrations and creates the storage bucket on start. Local storage uses
 SeaweedFS as an S3-compatible stand-in for R2, because MinIO no longer publishes images.
+
+The app connects as `photo_app`, which is **not** a PostgreSQL superuser, so row-level security
+applies (see `backend/apps/core/tenancy.py`). If you created the database volume before this
+role existed, reset it once with `docker compose down -v`.
+
+### Demo data
+
+```bash
+docker compose exec web python manage.py seed_demo
+```
+
+Creates two studios with an owner, a staff member and two events each, plus a platform admin.
+All demo accounts use the password `demo-pass-2026` (override with `DEMO_PASSWORD`).
+
+| Account | Email |
+| --- | --- |
+| Studio 1 owner / staff | `owner@lensandlight.test` / `staff@lensandlight.test` |
+| Studio 2 owner / staff | `owner@goldenhour.test` / `staff@goldenhour.test` |
+| Platform admin (Django admin) | `admin@platform.test` |
+
+Emails sent by the app (verification, password reset, staff invitations) appear in Mailpit.
+The Sprint 0 spike page is at http://localhost:5173/dev/spikes (development only).
+
+## Deploying
+
+See [docs/deployment.md](docs/deployment.md) for what hosting needs, the environment variables and
+the first-deploy checklist.
 
 ## Tests and checks
 
@@ -44,18 +71,24 @@ production image.
 ```text
 backend/            Django project
   config/           settings (all from environment variables), urls, wsgi
-  apps/core/        tenant-scoped base models, storage access, health check, jobs
+  apps/core/        tenant scoping and row-level security, storage, health check, SPA view
   apps/studios/     Studio (the tenant)
+  apps/accounts/    users (email login, Owner and Staff roles), auth and staff API
+  apps/events/      events (row-level security on)
+  apps/notifications/ emails, sent as background jobs
   apps/spikes/      Sprint 0 storage spike endpoints (only when SPIKES_ENABLED=true)
-frontend/           React app (TypeScript, Vite)
+frontend/           React app (TypeScript, Vite, React Router)
+  src/pages/        sign-in, sign-up, password, email confirmation, events, staff screens
+  src/auth/         logged-in user state
   src/compression/  RAW preview extraction, WebP compression to 100 KB, worker pool
-  src/api/          API clients
-docker/             Dockerfile (dev and production targets), SeaweedFS dev credentials
+  src/api/          API client (session cookie and CSRF)
+docker/             Dockerfile (dev and production targets), local DB role, SeaweedFS, R2 CORS template
+docs/               deployment guide
 ```
 
 ## Sprint 0 spikes
 
-The app currently opens on the spike page, used to settle the Sprint 0 exit criteria.
+The spike page (http://localhost:5173/dev/spikes) is used to settle the Sprint 0 exit criteria.
 
 1. **Compression.** Choose a folder of real RAW and JPEG files from the studios' cameras. The page
    extracts each RAW file's embedded JPEG preview, compresses a preview (about 1600 px) and a

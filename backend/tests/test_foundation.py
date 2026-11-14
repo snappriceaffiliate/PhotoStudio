@@ -38,6 +38,7 @@ def test_spike_routes_only_exist_when_enabled(settings):
         importlib.reload(config.urls)
 
 
+@pytest.mark.django_db  # the tenant middleware touches the database on every request
 class TestStorageSpike:
     @pytest.fixture(autouse=True)
     def spike_urls(self, settings):
