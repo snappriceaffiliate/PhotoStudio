@@ -182,6 +182,8 @@ select { padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; b
 .thumb.removed { display: grid; place-items: center; font-size: 11px; color: var(--muted); padding: 4px; word-break: break-all; }
 
 /* Share panel */
+/* WhatsApp brand green, darkened to keep white text at 4.6:1 */
+.button.whatsapp { background: #128c4b; color: #ffffff; }
 .progress-box { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 16px; }
 .big-number { font-size: 22px; font-weight: 700; margin: 0; }
 .big-number span { font-size: 16px; font-weight: 500; color: var(--muted); }

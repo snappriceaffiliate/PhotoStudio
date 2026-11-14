@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import { Field, FormMessage, useSubmit } from '../components/Form';
+import { formatPhone, invitationText, whatsappLink } from '../share/whatsapp';
 import type { EventDetail } from './EventPage';
 
 interface ClientLogin {
   id: string;
   client_name: string;
   email: string;
+  phone: string;
   username: string;
   is_active: boolean;
   last_login_at: string | null;
@@ -28,7 +31,8 @@ const when = (iso: string | null) =>
 export function SharePanel({ event, onChanged }: { event: EventDetail; onChanged: () => void }) {
   const [clients, setClients] = useState<ClientLogin[]>([]);
   const [progress, setProgress] = useState<ProgressInfo | null>(null);
-  const [form, setForm] = useState({ client_name: '', email: '' });
+  const { user } = useAuth();
+  const [form, setForm] = useState({ client_name: '', email: '', phone: '' });
   const [revealed, setRevealed] = useState<ClientLogin | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -50,7 +54,7 @@ export function SharePanel({ event, onChanged }: { event: EventDetail; onChanged
   const share = useSubmit(async () => {
     const created = await api<ClientLogin>(`/events/${event.id}/clients`, { method: 'POST', body: form });
     setRevealed(created);
-    setForm({ client_name: '', email: '' });
+    setForm({ client_name: '', email: '', phone: '' });
     await load();
     onChanged();
   });
@@ -58,7 +62,7 @@ export function SharePanel({ event, onChanged }: { event: EventDetail; onChanged
   async function act(client: ClientLogin, action: 'reset-password' | 'revoke') {
     const question = action === 'revoke'
       ? `Turn off ${client.client_name}'s access? They will be logged out.`
-      : `Make a new password for ${client.client_name}? We will email it to ${client.email}.`;
+      : `Make a new password for ${client.client_name}? ${client.email ? `We will email it to ${client.email}; ` : ''}you can also send it on WhatsApp.`;
     if (!window.confirm(question)) return;
     const updated = await api<ClientLogin>(`/client-access/${client.id}/${action}`, { method: 'POST' });
     if (updated.password) setRevealed(updated);
@@ -74,9 +78,19 @@ export function SharePanel({ event, onChanged }: { event: EventDetail; onChanged
 
   const galleryLink = (username: string) => `${window.location.origin}/gallery/login?u=${username}`;
 
+  const message = (c: ClientLogin) =>
+    invitationText({
+      clientName: c.client_name,
+      studioName: user?.studio?.name ?? '',
+      eventTitle: event.title,
+      galleryUrl: galleryLink(c.username),
+      username: c.username,
+      password: c.password ?? '',
+      selectionLimit: event.selection_limit,
+    });
+
   async function copy(c: ClientLogin) {
-    const text = `Gallery: ${galleryLink(c.username)}\nUsername: ${c.username}\nPassword: ${c.password}`;
-    await navigator.clipboard.writeText(text).catch(() => undefined);
+    await navigator.clipboard.writeText(message(c)).catch(() => undefined);
     setCopied(true);
   }
 
@@ -104,15 +118,26 @@ export function SharePanel({ event, onChanged }: { event: EventDetail; onChanged
 
       {revealed?.password && (
         <div className="credentials" role="status">
-          <p><strong>Login for {revealed.client_name}</strong> (emailed to {revealed.email})</p>
+          <p>
+            <strong>Login for {revealed.client_name}</strong>
+            {revealed.email ? ` (emailed to ${revealed.email})` : ''}
+          </p>
           <dl>
             <dt>Gallery</dt><dd><code>{galleryLink(revealed.username)}</code></dd>
             <dt>Username</dt><dd><code>{revealed.username}</code></dd>
             <dt>Password</dt><dd><code>{revealed.password}</code></dd>
           </dl>
-          <p className="muted">The password is shown only now. Copy it if you also want to send it by WhatsApp.</p>
+          <p className="muted">
+            The password is shown only now.{' '}
+            {revealed.phone
+              ? `Send it on WhatsApp to ${formatPhone(revealed.phone)}.`
+              : 'Send it on WhatsApp and choose the contact there.'}
+          </p>
           <div className="actions">
-            <button className="secondary" onClick={() => copy(revealed)}>{copied ? 'Copied' : 'Copy login details'}</button>
+            <a className="button whatsapp" href={whatsappLink(message(revealed), revealed.phone)} target="_blank" rel="noopener noreferrer">
+              Send on WhatsApp
+            </a>
+            <button className="secondary" onClick={() => copy(revealed)}>{copied ? 'Copied' : 'Copy message'}</button>
             <button className="link" onClick={() => { setRevealed(null); setCopied(false); }}>Hide</button>
           </div>
         </div>
@@ -122,7 +147,10 @@ export function SharePanel({ event, onChanged }: { event: EventDetail; onChanged
         <ul className="plain-list">
           {clients.map((c) => (
             <li key={c.id}>
-              <strong>{c.client_name}</strong> <span className="muted">· {c.username}{c.is_active ? '' : ' · access off'}</span>
+              <strong>{c.client_name}</strong>{' '}
+              <span className="muted">
+                · {c.username}{c.phone ? ` · ${formatPhone(c.phone)}` : ''}{c.is_active ? '' : ' · access off'}
+              </span>
               <div className="row-actions">
                 <button className="link" onClick={() => act(c, 'reset-password')}>New password</button>
                 {c.is_active && <button className="link danger" onClick={() => act(c, 'revoke')}>Turn off access</button>}
@@ -138,7 +166,11 @@ export function SharePanel({ event, onChanged }: { event: EventDetail; onChanged
           <FormMessage error={share.error} />
           <Field label="Client name" name="client_name" required errors={share.fields}
             value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} />
-          <Field label="Client email" name="email" type="email" required errors={share.fields}
+          <Field label="Client WhatsApp number" name="phone" type="tel" autoComplete="tel" inputMode="tel" errors={share.fields}
+            hint="For example 98765 43210. Add + and the country code for numbers outside India."
+            value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          <Field label="Client email (optional)" name="email" type="email" errors={share.fields}
+            hint="We email the login too when you add one."
             value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <button type="submit" disabled={share.busy}>{share.busy ? 'Sharing…' : 'Share with client'}</button>
         </form>

@@ -21,7 +21,7 @@ from apps.audit.models import record
 from apps.billing import entitlements
 from apps.core import storage
 from apps.core.tenancy import bypass_rls
-from apps.core.validators import single_line
+from apps.core.validators import single_line, whatsapp_number
 from apps.events.models import Album, Event
 from apps.notifications import emails
 from apps.photos.models import Photo
@@ -36,7 +36,18 @@ PAGE_SIZE_MAX = 200
 
 class ShareRequest(serializers.Serializer):
     client_name = serializers.CharField(max_length=150, validators=[single_line])
-    email = serializers.EmailField()
+    email = serializers.EmailField(required=False, allow_blank=True, default="")
+    phone = serializers.CharField(required=False, allow_blank=True, default="", max_length=30)
+
+    def validate_phone(self, value):
+        return whatsapp_number(value) if value.strip() else ""
+
+    def validate(self, attrs):
+        if not attrs["email"] and not attrs["phone"]:
+            raise serializers.ValidationError(
+                {"email": ["Enter the client's email, WhatsApp number, or both."]}
+            )
+        return attrs
 
 
 def _access_data(a: ClientAccess) -> dict:
@@ -44,6 +55,7 @@ def _access_data(a: ClientAccess) -> dict:
         "id": str(a.pk),
         "client_name": a.client_name,
         "email": a.email,
+        "phone": a.phone,
         "username": a.username,
         "is_active": a.is_active,
         "last_login_at": a.last_login_at,
@@ -90,6 +102,7 @@ class EventClientsView(APIView):
                 event=event,
                 client_name=data.validated_data["client_name"],
                 email=data.validated_data["email"].lower(),
+                phone=data.validated_data["phone"],
                 username=client_access.generate_username(data.validated_data["client_name"]),
             )
             access.set_password(password)
@@ -97,8 +110,10 @@ class EventClientsView(APIView):
             if event.status in (Event.Status.DRAFT, Event.Status.UPLOADING):
                 event.status = Event.Status.SHARED
                 event.save(update_fields=["status", "updated_at"])
-            emails.client_invitation_email(access, password)
-            record(request, "client.shared", event, f"{access.client_name} <{access.email}>")
+            if access.email:  # WhatsApp-only clients get their login from the studio directly
+                emails.client_invitation_email(access, password)
+            contact = ", ".join(c for c in (access.email, access.phone and f"+{access.phone}") if c)
+            record(request, "client.shared", event, f"{access.client_name} ({contact})")
         # The password is shown once, here, and sent in the invitation email; only its hash is kept.
         return Response(
             {**_access_data(access), "password": password}, status=status.HTTP_201_CREATED
@@ -128,7 +143,8 @@ class ClientAccessActionView(APIView):
         access.set_password(password)
         access.is_active, access.failed_attempts, access.locked_until = True, 0, None
         access.save()
-        emails.client_invitation_email(access, password)
+        if access.email:
+            emails.client_invitation_email(access, password)
         record(request, "client.password_reset", access.event, access.username)
         return Response({**_access_data(access), "password": password})
 
