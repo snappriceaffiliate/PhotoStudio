@@ -14,3 +14,8 @@ frontend/public/_samples/
 .coverage
 coverage/
 htmlcov/
+
+# Filled-in production settings hold real secrets: never commit them.
+deploy/.env.production
+.env.production
+*.dump
