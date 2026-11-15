@@ -11,3 +11,6 @@ frontend/dist/
 # RAW and photo samples stay out of the repository.
 samples/
 frontend/public/_samples/
+.coverage
+coverage/
+htmlcov/
