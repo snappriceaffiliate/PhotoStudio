@@ -11,12 +11,14 @@ set -euo pipefail
 root="${OPT_ROOT:-/opt}"
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 me="$(id -un)"
-# Use sudo only when the folder is not already writable by this user.
+# Use sudo only for what this user cannot already do, so nothing asks for a password
+# when the folders exist and belong to you.
 as_root() { if [[ -w "$root" ]]; then "$@"; else sudo "$@"; fi; }
-
-as_root mkdir -p "$root/picksnap" "$root/deployment" "$root/backup"
-as_root chown -R "$me:" "$root/picksnap" "$root/deployment" "$root/backup"
-as_root chmod 700 "$root/backup"
+for dir in picksnap deployment backup; do
+  [[ -d "$root/$dir" ]] || as_root mkdir -p "$root/$dir"
+  [[ -O "$root/$dir" ]] || as_root chown -R "$me:" "$root/$dir"
+done
+chmod 700 "$root/backup"
 
 if [[ "$repo" != "$root/picksnap" ]]; then
   echo "Note: the repository is at $repo, not $root/picksnap." >&2
