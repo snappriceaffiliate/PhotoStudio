@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Back up the production database on the VPS. Run it by hand or from cron (see the guide):
 #   ./deploy/backup.sh
-# Keeps the last KEEP_DAYS days (default 14) in BACKUP_DIR (default ~/picksnap-backups).
+# Keeps the last KEEP_DAYS days (default 14) in BACKUP_DIR. The /opt/deployment wrapper sets it
+# to /opt/backup; run directly, the default is ~/picksnap-backups.
 # The files contain client data: they are readable by you only. A backup that lives only
 # on the same server is not enough, so copy the folder somewhere else as well.
 set -euo pipefail

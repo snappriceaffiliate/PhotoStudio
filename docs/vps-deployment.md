@@ -25,18 +25,28 @@ dig +short app.yourname.in
 
 It must print the server's address before you go further (it can take a few minutes).
 
-## 2. Secure the server
+## The folders on the server
 
-Log in as root once, then:
+Everything lives under `/opt`:
 
-```bash
-adduser deploy && usermod -aG sudo deploy
-rsync --archive --chown=deploy:deploy ~/.ssh /home/deploy
+```
+/opt/
+├── picksnap/      the code (this repository); the compose file and settings are in deploy/
+├── deployment/    deploy.sh and backup.sh: short wrappers, so you never need to cd anywhere
+└── backup/        nightly database dumps (readable by you only)
 ```
 
-Open a **second** terminal and check `ssh deploy@<server ip>` works before the next step.
-Then turn off password logins and the root login, and switch on the firewall and automatic
-security updates:
+The wrappers only point at the real scripts in `/opt/picksnap/deploy/`, so a `git pull`
+updates the scripts too. Photos are not on the server (they are in R2), and the database
+lives in a Docker volume called `picksnap_pgdata`.
+
+## 2. Secure the server
+
+Use your own normal user (called `sundar` in the examples), not root. If you only have root,
+create one first: `adduser sundar && usermod -aG sudo sundar`, and copy your SSH key to it.
+
+Open a **second** terminal and check that `ssh sundar@<server ip>` works with your SSH key
+**before** turning off password logins, or you can lock yourself out. Then:
 
 ```bash
 sudo sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/; s/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
@@ -51,40 +61,45 @@ Only ports 22, 80 and 443 are open. The database has no published port at all.
 
 ```bash
 curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker deploy
+sudo usermod -aG docker $USER
 ```
 
 Log out and in again, then check `docker compose version`.
 
 ## 4. Get the code and create the settings
 
+The folders in `/opt` may belong to root. Give them to your user, then clone into
+`/opt/picksnap` and set up the wrappers:
+
 ```bash
-git clone https://github.com/snappriceaffiliate/PhotoStudio.git
-cd PhotoStudio
+sudo chown -R $USER: /opt/picksnap /opt/deployment /opt/backup
+git clone https://github.com/snappriceaffiliate/PhotoStudio.git /opt/picksnap
+cd /opt/picksnap
+./deploy/setup-layout.sh
 ./deploy/make-env.sh app.yourname.in
 nano deploy/.env.production
 ```
 
-`make-env.sh` creates the file with random secrets, readable by you only. Fill in the
-storage section (endpoint, bucket, access key, secret), the email section and, when you have
-them, the Razorpay keys. Never put this file in Git (it is ignored) and never paste it into
-a chat.
+`setup-layout.sh` creates anything missing, makes the backup folder private and writes
+`/opt/deployment/deploy.sh` and `/opt/deployment/backup.sh`. `make-env.sh` creates the
+settings file with random secrets, readable by you only. Fill in the storage section
+(endpoint, bucket, access key, secret), the email section and, when you have them, the
+Razorpay keys. Never put this file in Git (it is ignored) and never paste it into a chat.
 
 ## 5. Start it
 
 ```bash
-docker compose --env-file deploy/.env.production -f deploy/docker-compose.prod.yml up -d --build
-docker compose --env-file deploy/.env.production -f deploy/docker-compose.prod.yml ps
+/opt/deployment/deploy.sh
 ```
 
-The first build takes a few minutes. All four services (`db`, `web`, `worker`, `caddy`)
-should be running, with `web` healthy. Caddy asks Let's Encrypt for the certificate on the
-first visit; this needs port 80 open and the DNS record from step 1.
+The first run builds the image (a few minutes), starts all four services (`db`, `web`,
+`worker`, `caddy`) and waits until the web app is healthy. Caddy asks Let's Encrypt for the
+certificate on the first visit, which needs port 80 open and the DNS record from step 1.
 
 To save typing, add this to `~/.bashrc` and log in again:
 
 ```bash
-alias pick='docker compose --env-file ~/PhotoStudio/deploy/.env.production -f ~/PhotoStudio/deploy/docker-compose.prod.yml'
+alias pick='docker compose --env-file /opt/picksnap/deploy/.env.production -f /opt/picksnap/deploy/docker-compose.prod.yml'
 ```
 
 The rest of this guide uses `pick`, for example `pick ps` and `pick logs -f web`.
@@ -122,19 +137,19 @@ and run `pick exec web python manage.py sync_razorpay_plans`, as in `docs/deploy
 Run a backup by hand to see it work, then schedule it:
 
 ```bash
-./deploy/backup.sh
+/opt/deployment/backup.sh
 crontab -e
 ```
 
-Add the line below (a backup at 02:30 every night, keeping 14 days):
+Add the line below (a backup at 02:30 every night; the last 14 days are kept in `/opt/backup`):
 
 ```
-30 2 * * * cd /home/deploy/PhotoStudio && ./deploy/backup.sh >> /home/deploy/backup.log 2>&1
+30 2 * * * /opt/deployment/backup.sh >> /opt/backup/backup.log 2>&1
 ```
 
-A backup on the same server is lost with the server, so also copy `~/picksnap-backups` to
-another place regularly (your own computer, or a second R2 bucket with `rclone`). Practise a
-restore with `scripts/db-restore-check.sh` (see `docs/runbook.md`) before you need it.
+A backup on the same server is lost with the server, so also copy `/opt/backup` to another
+place regularly (your own computer, or a second R2 bucket with `rclone`). Practise a restore
+with `scripts/db-restore-check.sh` (see `docs/runbook.md`) before you need it.
 
 ## 8. Watching it
 
@@ -147,19 +162,19 @@ restore with `scripts/db-restore-check.sh` (see `docs/runbook.md`) before you ne
 ## Updating to a new version
 
 ```bash
-cd ~/PhotoStudio
-git pull
-./deploy/backup.sh
-pick up -d --build
-pick ps
+/opt/deployment/deploy.sh
 ```
 
-The web container applies database changes when it starts. Check `/api/health` afterwards.
-Studios in the middle of an upload can resume it by choosing the folder again.
+It takes the latest code from `main`, backs up the database, rebuilds, restarts and waits
+until the web app is healthy. It refuses to run if someone has edited files in
+`/opt/picksnap`, and if the app does not become healthy it prints the log lines and the exact
+command to go back. The web container applies database changes when it starts. Studios in the
+middle of an upload can resume it by choosing the folder again.
 
-**Roll back:** `git log --oneline` to find the previous good version, `git checkout <id>`,
-and `pick up -d --build`. If a database change must be undone, restore the backup taken
-just before the update (`pg_restore`, see the runbook).
+**Roll back:** `cd /opt/picksnap`, `git log --oneline` to find the previous good version,
+`git checkout <id>`, then `pick up -d --build`. If a database change must be undone, restore
+the backup taken just before the update (`pg_restore`, see the runbook). To go forward again,
+run `/opt/deployment/deploy.sh`, which returns to `main`.
 
 ## Changing a setting
 

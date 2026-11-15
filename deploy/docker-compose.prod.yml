@@ -4,6 +4,8 @@
 #   cp deploy/.env.production.example deploy/.env.production   # then fill it in
 #   docker compose --env-file deploy/.env.production -f deploy/docker-compose.prod.yml up -d --build
 
+name: picksnap # containers are picksnap-web-1 and so on; volumes picksnap_pgdata
+
 x-app: &app
   build:
     context: ..
