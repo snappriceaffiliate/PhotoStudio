@@ -1,5 +1,8 @@
 # Deployment guide
 
+Running on a single VPS? Follow [vps-deployment.md](vps-deployment.md): it has the server setup,
+the production compose file, HTTPS, backups and updates. This page explains the settings.
+
 The app ships as **one Docker image** (`docker/Dockerfile`, target `production`). Any platform
 that can run a Docker image as a web service plus a second process (the worker), next to a
 managed PostgreSQL database, can host it: for example Render, Railway, Fly.io, DigitalOcean App

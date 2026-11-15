@@ -11,3 +11,8 @@ frontend/dist/
 # RAW and photo samples stay out of the repository.
 samples/
 frontend/public/_samples/
+
+# Filled-in production settings hold real secrets: never commit them.
+deploy/.env.production
+.env.production
+*.dump

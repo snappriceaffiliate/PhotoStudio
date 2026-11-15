@@ -1,0 +1,20 @@
+# Caddy obtains and renews the HTTPS certificate for the domain by itself.
+# Port 80 must be open to the internet for the first certificate.
+{$DOMAIN} {
+	encode zstd gzip
+
+	# The app sets its own security headers (HSTS, framing, content type); Caddy adds the
+	# X-Forwarded-For and X-Forwarded-Proto headers the app needs (NUM_PROXIES=1).
+	reverse_proxy web:8000
+
+	# Photos and thumbnails go straight from Cloudflare R2 to the browser, so uploads
+	# never pass through this server. Keep request bodies small.
+	request_body {
+		max_size 5MB
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
