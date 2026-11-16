@@ -7,6 +7,7 @@ __pycache__/
 backend/staticfiles/
 node_modules/
 frontend/dist/
+copy-tool/dist/
 .DS_Store
 # RAW and photo samples stay out of the repository.
 samples/

@@ -81,6 +81,8 @@ There are 376 automated tests (220 backend, 156 frontend). What they cannot chec
 real RAW files, Safari, real phones and real payments, is listed as manual cases in the
 "PickSnap: Test Cases" document.
 
+The `copy-tool/` folder is a separate small app (see `copy-tool/README.md`) with its own `npm run lint`, `npm test` and `npm run build`.
+
 CI runs all of these on every pull request (`.github/workflows/ci.yml`) and builds the
 production image.
 
