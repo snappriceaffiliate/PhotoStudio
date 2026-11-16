@@ -423,3 +423,10 @@ figure img, .placeholder { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; 
 .brand-preview-bar { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--card); border-top: 1px solid var(--line); font-size: 14px; }
 .preview-heart { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--marigold); color: var(--on-marigold); }
 .brand-preview-foot { margin: 0; padding: 10px; text-align: center; font-size: 12px; color: var(--muted); }
+
+/* Stage 4 call to action on the event page: copy the chosen originals to this computer. */
+.copy-callout { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; margin: 12px 0 16px;
+  padding: 16px; border-radius: var(--r-lg); background: var(--primary-soft); border: 1px solid var(--primary); }
+.copy-callout > div { flex: 1 1 320px; }
+.copy-callout p { margin: 4px 0 0; font-size: 14px; }
+.copy-callout .button { flex: 0 0 auto; }

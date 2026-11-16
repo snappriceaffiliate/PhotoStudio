@@ -25,8 +25,27 @@ const DOWNLOADS = [
   { type: 'txt', label: 'Plain list', hint: 'One file path per line.' },
 ];
 
+/** Stage 4: the selection has arrived, so offer the next job, copying the originals. */
+function CopyToLocal({ eventId, count }: { eventId: string; count: number }) {
+  return (
+    <div className="copy-callout">
+      <div>
+        <strong>Ready to copy the {count} chosen {count === 1 ? 'photo' : 'photos'} from your originals</strong>
+        <p className="muted">
+          Opens the copy tool in a new tab with this selection already loaded. Choose your original photo folder and the
+          chosen photos, with their RAW and sidecar files, are copied into a new <em>Selected</em> folder. Nothing is
+          uploaded. Works in Chrome or Edge on a computer.
+        </p>
+      </div>
+      <a className="button" href={`/copy/?event=${encodeURIComponent(eventId)}`} target="_blank" rel="noopener">
+        Copy selected files to local
+      </a>
+    </div>
+  );
+}
+
 /** The client's selection: review it and download it in the studio's preferred form. */
-export function SelectionPanel({ eventId, version }: { eventId: string; version: number }) {
+export function SelectionPanel({ eventId, version, status }: { eventId: string; version: number; status: string }) {
   const [data, setData] = useState<SelectionData | null>(null);
   const [open, setOpen] = useState<SelectedPhoto | null>(null);
 
@@ -40,6 +59,7 @@ export function SelectionPanel({ eventId, version }: { eventId: string; version:
   return (
     <section className="panel">
       <h2>Client's selection <span className="muted">({data.count} photos)</span></h2>
+      {status === 'submitted' && <CopyToLocal eventId={eventId} count={data.count} />}
       <p className="muted">
         The copy scripts make a <strong>Selected</strong> folder with copies of the chosen originals, including RAW and
         sidecar files with the same name. Your originals are not changed.

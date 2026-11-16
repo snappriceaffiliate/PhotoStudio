@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path, re_path
+from django.views.generic import RedirectView
 from django_otp.admin import OTPAdminSite
 from rest_framework.routers import SimpleRouter
 
@@ -34,5 +35,11 @@ urlpatterns = [
 if settings.SPIKES_ENABLED:
     urlpatterns.append(path("api/v1/spike/", include("apps.spikes.urls")))
 
+# The copy tool lives at /copy/ (static files in the production image, served by WhiteNoise).
+# A missing file under /copy/ is a 404, not the React app; /copy without the slash goes to /copy/.
+urlpatterns.append(
+    path("copy", RedirectView.as_view(url="/copy/", query_string=True), name="copy-tool")
+)
+
 # Every other path is a screen of the React app (production only; Vite serves it in development).
-urlpatterns.append(re_path(r"^(?!api/|admin/|static/).*$", spa, name="spa"))
+urlpatterns.append(re_path(r"^(?!api/|admin/|static/|copy/).*$", spa, name="spa"))
