@@ -227,6 +227,11 @@ RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
 RAZORPAY_API_BASE = "https://api.razorpay.com/v1"
 TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "30"))
+
+# Sharing galleries with clients. Until an email service is set up, studios share by WhatsApp
+# only and do not have to confirm their own email first. Turn both on once email works.
+CLIENT_EMAIL_SHARING = env_bool("CLIENT_EMAIL_SHARING", False)
+REQUIRE_VERIFIED_EMAIL_TO_SHARE = env_bool("REQUIRE_VERIFIED_EMAIL_TO_SHARE", False)
 # After a payment problem or the end of a paid period, studios keep working this long.
 BILLING_GRACE_DAYS = 7
 

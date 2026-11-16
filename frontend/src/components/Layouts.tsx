@@ -71,7 +71,7 @@ export function StudioLayout() {
           </div>
         </div>
       </header>
-      {!user.email_verified && (
+      {!user.email_verified && user.sharing?.confirm_email_first !== false && (
         <div className="banner" role="status">
           Confirm your email address using the link we sent to <strong>{user.email}</strong>.{' '}
           {resent ? 'A new link is on its way.' : <button className="link" onClick={resend}>Send a new link</button>}

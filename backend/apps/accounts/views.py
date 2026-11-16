@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import authenticate, login, logout, password_validation
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
@@ -48,6 +49,12 @@ def _me(user) -> dict:
             data["billing"] = entitlements.summary(user.studio_id)
     else:
         data["billing"] = None
+    # Lets the screens match the server: WhatsApp-only sharing, and whether the studio has to
+    # confirm its email before sharing (see CLIENT_EMAIL_SHARING in settings).
+    data["sharing"] = {
+        "client_email": settings.CLIENT_EMAIL_SHARING,
+        "confirm_email_first": settings.REQUIRE_VERIFIED_EMAIL_TO_SHARE,
+    }
     return {"user": data}
 
 

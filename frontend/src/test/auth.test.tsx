@@ -227,6 +227,16 @@ describe('the studio top bar', () => {
     expect(callsTo(calls, 'POST', '/api/v1/auth/resend-verification')).toHaveLength(1);
   });
 
+  it('does not ask to confirm the email when sharing does not need it', async () => {
+    mockApi({
+      ...session({ ...owner, email_verified: false, sharing: { client_email: false, confirm_email_first: false } }).routes,
+      ...events,
+    });
+    renderApp('/events');
+    await screen.findByRole('heading', { name: 'Events' });
+    expect(screen.queryByText(/Confirm your email address/)).toBeNull();
+  });
+
   it('warns when the trial is about to end', async () => {
     const until = new Date(Date.now() + 3 * 86400000).toISOString();
     mockApi({ ...session({ ...owner, billing: { ...billing, state: 'trial', plan: 'Free trial', until } }).routes, ...events });

@@ -95,6 +95,8 @@ export function SharePanel({ event, onChanged }: { event: EventDetail; onChanged
   }
 
   const canShare = event.photo_count > 0 && event.status !== 'archived';
+  // WhatsApp only until the server has an email service (see CLIENT_EMAIL_SHARING).
+  const emailSharing = user?.sharing?.client_email !== false;
 
   return (
     <div className="panel">
@@ -162,16 +164,22 @@ export function SharePanel({ event, onChanged }: { event: EventDetail; onChanged
 
       {canShare ? (
         <form onSubmit={share.onSubmit} noValidate>
-          <p className="muted">{clients.length ? 'Add another login, for example for family.' : 'Send the client a login to choose their photos.'}</p>
+          <p className="muted">
+            {clients.length ? 'Add another login, for example for family.' : 'Send the client a login to choose their photos.'}
+            {emailSharing ? '' : ' You send it on WhatsApp.'}
+          </p>
           <FormMessage error={share.error} />
           <Field label="Client name" name="client_name" required errors={share.fields}
             value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} />
           <Field label="Client WhatsApp number" name="phone" type="tel" autoComplete="tel" inputMode="tel" errors={share.fields}
+            required={!emailSharing}
             hint="For example 98765 43210. Add + and the country code for numbers outside India."
             value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          <Field label="Client email (optional)" name="email" type="email" errors={share.fields}
-            hint="We email the login too when you add one."
-            value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          {emailSharing && (
+            <Field label="Client email (optional)" name="email" type="email" errors={share.fields}
+              hint="We email the login too when you add one."
+              value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          )}
           <button type="submit" disabled={share.busy}>{share.busy ? 'Sharing…' : 'Share with client'}</button>
         </form>
       ) : (

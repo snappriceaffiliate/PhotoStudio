@@ -21,6 +21,15 @@ export interface User {
   email_verified: boolean;
   studio: Studio | null;
   billing: BillingSummary | null;
+  /** How sharing works on this server. Missing (older servers) means email sharing is on. */
+  sharing?: SharingSettings;
+}
+
+export interface SharingSettings {
+  /** Clients can be given an email address and get their login by email. Off: WhatsApp only. */
+  client_email: boolean;
+  /** The studio must confirm its own email before sharing a gallery. */
+  confirm_email_first: boolean;
 }
 
 export interface MeResponse {

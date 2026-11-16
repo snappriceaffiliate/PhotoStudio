@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -44,6 +45,14 @@ class ShareRequest(serializers.Serializer):
         return whatsapp_number(value) if value.strip() else ""
 
     def validate(self, attrs):
+        if not settings.CLIENT_EMAIL_SHARING:
+            # WhatsApp only: no client emails are stored or sent.
+            if not attrs["phone"]:
+                raise serializers.ValidationError(
+                    {"phone": ["Enter the client's WhatsApp number."]}
+                )
+            attrs["email"] = ""
+            return attrs
         if not attrs["email"] and not attrs["phone"]:
             raise serializers.ValidationError(
                 {"email": ["Enter the client's email, WhatsApp number, or both."]}
@@ -87,7 +96,8 @@ class EventClientsView(APIView):
                 {"detail": "This event is archived."}, status=status.HTTP_400_BAD_REQUEST
             )
         entitlements.require_can_work(request.studio_id)
-        require_verified_email(request.user)
+        if settings.REQUIRE_VERIFIED_EMAIL_TO_SHARE:
+            require_verified_email(request.user)
         ready = Photo.objects.for_studio(request.studio_id).filter(
             event=event, status=Photo.Status.READY
         )
@@ -111,7 +121,7 @@ class EventClientsView(APIView):
             if event.status in (Event.Status.DRAFT, Event.Status.UPLOADING):
                 event.status = Event.Status.SHARED
                 event.save(update_fields=["status", "updated_at"])
-            if access.email:  # WhatsApp-only clients get their login from the studio directly
+            if access.email and settings.CLIENT_EMAIL_SHARING:  # otherwise the studio sends it
                 emails.client_invitation_email(access, password)
             contact = ", ".join(c for c in (access.email, access.phone and f"+{access.phone}") if c)
             record(request, "client.shared", event, f"{access.client_name} ({contact})")
@@ -139,12 +149,13 @@ class ClientAccessActionView(APIView):
             record(request, "client.access_turned_off", access.event, access.username)
             return Response(_access_data(access))
         entitlements.require_can_work(request.studio_id)
-        require_verified_email(request.user)
+        if settings.REQUIRE_VERIFIED_EMAIL_TO_SHARE:
+            require_verified_email(request.user)
         password = client_access.generate_password()
         access.set_password(password)
         access.is_active, access.failed_attempts, access.locked_until = True, 0, None
         access.save()
-        if access.email:
+        if access.email and settings.CLIENT_EMAIL_SHARING:
             emails.client_invitation_email(access, password)
         record(request, "client.password_reset", access.event, access.username)
         return Response({**_access_data(access), "password": password})
