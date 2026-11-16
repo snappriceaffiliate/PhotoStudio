@@ -6,6 +6,8 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [react()],
   base: './',
-  server: { host: true, port: 5180 },
+  // In development the page asks PickSnap's API (run by Docker Compose on port 8000) for an event's
+  // selection; the studio's login cookie for localhost is shared across ports.
+  server: { host: true, port: 5180, proxy: { '/api': process.env.VITE_API_TARGET ?? 'http://localhost:8000' } },
   build: { outDir: 'dist' },
 });

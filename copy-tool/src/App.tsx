@@ -5,6 +5,7 @@ import { canTryDemo, createSample } from './demo.ts';
 import { canPickFolders, pickFolder, SELECTED_DIR, type DirHandleLike } from './fs.ts';
 import { buildPlan, suggestFolder, type Plan } from './plan.ts';
 import { formatBytes } from './report.ts';
+import { eventIdFromAddress, loadEventSelection, NotSignedInError, type EventSelection } from './source.ts';
 
 function LogoMark({ size = 34 }: { size?: number }) {
   return (
@@ -22,13 +23,26 @@ interface Props {
   pick?: () => Promise<DirHandleLike>;
   /** Whether this browser can write to a folder. Replaced in tests. */
   supported?: boolean;
+  /** The PickSnap event whose selection to load (from ?event= in the address). Replaced in tests. */
+  eventId?: string | null;
+  /** Fetches an event's selection from PickSnap. Replaced in tests. */
+  loadEvent?: (eventId: string) => Promise<EventSelection>;
 }
+
+type LoadedSelection = Selection & { name: string; fromEvent?: boolean };
 
 type Scan = { state: 'idle' } | { state: 'scanning'; checked: number; total: number } | { state: 'done'; plan: Plan; suggestion: string | null };
 
-export default function App({ pick = pickFolder, supported = canPickFolders() }: Props) {
-  const [selection, setSelection] = useState<(Selection & { name: string }) | null>(null);
+export default function App({
+  pick = pickFolder,
+  supported = canPickFolders(),
+  eventId = eventIdFromAddress(typeof window === 'undefined' ? '' : window.location.search),
+  loadEvent = loadEventSelection,
+}: Props) {
+  const [selection, setSelection] = useState<LoadedSelection | null>(null);
   const [fileError, setFileError] = useState('');
+  const [signedOut, setSignedOut] = useState(false);
+  const [loadingEvent, setLoadingEvent] = useState(Boolean(eventId));
   const [folder, setFolder] = useState<DirHandleLike | null>(null);
   const [folderError, setFolderError] = useState('');
   const [scan, setScan] = useState<Scan>({ state: 'idle' });
@@ -70,6 +84,27 @@ export default function App({ pick = pickFolder, supported = canPickFolders() }:
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [busy]);
+
+  const loadFromEvent = useCallback(async () => {
+    if (!eventId) return;
+    setLoadingEvent(true);
+    setFileError('');
+    setSignedOut(false);
+    try {
+      const loaded = await loadEvent(eventId);
+      setSelection({ photos: loaded.photos, duplicates: loaded.duplicates, name: loaded.title, fromEvent: true });
+    } catch (error) {
+      setSelection(null);
+      setSignedOut(error instanceof NotSignedInError);
+      setFileError(error instanceof SelectionFileError ? error.message : 'The selection could not be loaded from PickSnap.');
+    } finally {
+      setLoadingEvent(false);
+    }
+  }, [eventId, loadEvent]);
+
+  useEffect(() => {
+    void loadFromEvent();
+  }, [loadFromEvent]);
 
   const loadFile = useCallback(async (file: File | undefined) => {
     if (!file) return;
@@ -137,6 +172,7 @@ export default function App({ pick = pickFolder, supported = canPickFolders() }:
     setResult(null);
     setFileError('');
     setFolderError('');
+    void loadFromEvent(); // when opened from an event, bring its selection back
   }
 
   const problems = (plan?.missing.length ?? 0) + (result?.failed.length ?? 0) + (result?.conflicts.length ?? 0);
@@ -164,7 +200,12 @@ export default function App({ pick = pickFolder, supported = canPickFolders() }:
 
       <section className={`card ${selection ? 'done' : ''}`} aria-labelledby="s1">
         <h2 id="s1"><span className="num">1</span> Choose the selection file</h2>
-        <p className="help">The CSV you downloaded from the event page (“Spreadsheet (CSV)”). A plain list works too.</p>
+        <p className="help">
+          {eventId
+            ? 'Loaded for you from the event page. You can also choose a CSV file instead.'
+            : 'The CSV you downloaded from the event page (“Spreadsheet (CSV)”). A plain list works too.'}
+        </p>
+        {loadingEvent && <p className="muted" role="status">Loading the client’s selection from PickSnap…</p>}
         <div
           className={`drop ${dragging ? 'over' : ''}`}
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -174,14 +215,20 @@ export default function App({ pick = pickFolder, supported = canPickFolders() }:
           <input ref={fileInput} type="file" accept=".csv,.txt,text/csv,text/plain" hidden
             onChange={(e) => { void loadFile(e.target.files?.[0]); e.target.value = ''; }} />
           <button type="button" disabled={busy} onClick={() => fileInput.current?.click()}>
-            {selection ? 'Choose a different file' : 'Choose CSV file'}
+            {selection || eventId ? 'Use a CSV file instead' : 'Choose CSV file'}
           </button>
           <span className="muted">or drop it here</span>
         </div>
-        {fileError && <p className="error" role="alert">{fileError}</p>}
+        {fileError && (
+          <p className="error" role="alert">
+            {fileError}
+            {signedOut && <> Open <a href="/">PickSnap</a>, log in, then click the button on the event page again.</>}
+          </p>
+        )}
         {selection && (
           <p className="ok" role="status">
-            <strong>{selection.name}</strong>: {selection.photos.length} {selection.photos.length === 1 ? 'photo' : 'photos'} chosen
+            {selection.fromEvent ? <>Loaded from PickSnap: <strong>{selection.name}</strong></> : <strong>{selection.name}</strong>}
+            : {selection.photos.length} {selection.photos.length === 1 ? 'photo' : 'photos'} chosen
             {selection.duplicates > 0 && ` (${selection.duplicates} repeated ${selection.duplicates === 1 ? 'line' : 'lines'} ignored)`}.
           </p>
         )}

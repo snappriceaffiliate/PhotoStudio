@@ -269,6 +269,39 @@ describe('an event', () => {
     expect(screen.getByText(/also\s+used in another folder/)).toBeTruthy();
   });
 
+  it('at stage 4 offers to copy the chosen files to the studio’s computer', async () => {
+    mockApi(eventRoutes({
+      'GET /api/v1/events/e1': { ...detail, status: 'submitted' },
+      'GET /api/v1/events/e1/selection': {
+        count: 2, duplicate_filenames: [],
+        results: [
+          { photo_id: 'p1', relative_path: 'A/IMG_1.jpg', filename: 'IMG_1.jpg', note: '', thumb_url: 'data:,', preview_url: 'data:,' },
+          { photo_id: 'p2', relative_path: 'A/IMG_2.jpg', filename: 'IMG_2.jpg', note: '', thumb_url: 'data:,', preview_url: 'data:,' },
+        ],
+      },
+    }));
+    renderApp('/events/e1');
+    const link = await screen.findByRole('link', { name: 'Copy selected files to local' });
+    expect(link.getAttribute('href')).toBe('/copy/?event=e1');
+    expect(link.getAttribute('target')).toBe('_blank'); // the studio page stays open
+    expect(link.getAttribute('rel')).toContain('noopener');
+    expect(screen.getByText(/Ready to copy the 2 chosen photos/)).toBeTruthy();
+    expect(screen.getByText(/Nothing is\s+uploaded/)).toBeTruthy();
+  });
+
+  it('does not offer the copy button before the client has sent the selection', async () => {
+    mockApi(eventRoutes({
+      'GET /api/v1/events/e1': { ...detail, status: 'shared' },
+      'GET /api/v1/events/e1/selection': {
+        count: 1, duplicate_filenames: [],
+        results: [{ photo_id: 'p1', relative_path: 'A/IMG_1.jpg', filename: 'IMG_1.jpg', note: '', thumb_url: 'data:,', preview_url: 'data:,' }],
+      },
+    }));
+    renderApp('/events/e1');
+    await screen.findByText('(1 photos)');
+    expect(screen.queryByRole('link', { name: 'Copy selected files to local' })).toBeNull();
+  });
+
   it('archives only after confirmation', async () => {
     const calls = mockApi(eventRoutes({ 'POST /api/v1/events/e1/archive': { ...detail, status: 'archived' } }));
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);

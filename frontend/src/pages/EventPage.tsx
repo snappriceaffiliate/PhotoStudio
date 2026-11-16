@@ -117,7 +117,7 @@ export function EventPage() {
 
       <div className="two-col">
         <div>
-          <SelectionPanel eventId={event.id} version={photosVersion} />
+          <SelectionPanel eventId={event.id} version={photosVersion} status={event.status} />
           {event.status !== 'archived' && <UploadPanel
             event={event}
             albums={albums}

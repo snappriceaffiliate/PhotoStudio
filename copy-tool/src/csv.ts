@@ -93,8 +93,9 @@ export function folderSegments(folder: string): string[] {
   return segments;
 }
 
-function photoFrom(path: string, note = '', album = ''): SelectedPhoto | null {
-  const clean = removeFormulaGuard(path.trim()).normalize('NFC').replace(/\\/g, '/');
+function photoFrom(path: string, note = '', album = '', guarded = true): SelectedPhoto | null {
+  const trimmed = path.trim();
+  const clean = (guarded ? removeFormulaGuard(trimmed) : trimmed).normalize('NFC').replace(/\\/g, '/');
   if (!clean || clean.endsWith('/')) return null;
   const slash = clean.lastIndexOf('/');
   const folder = folderSegments(slash >= 0 ? clean.slice(0, slash) : '');
@@ -112,6 +113,22 @@ function dedupe(photos: SelectedPhoto[]): Selection {
     unique.push(p);
   }
   return { photos: unique, duplicates: photos.length - unique.length };
+}
+
+export interface PathRow {
+  /** Path below the event folder, as PickSnap stores it (not a spreadsheet cell, so no guard to remove). */
+  path: string;
+  note?: string;
+  album?: string;
+}
+
+/** Builds the list from rows PickSnap sent directly (the event's selection), not from a file. */
+export function selectionFromRows(rows: PathRow[]): Selection {
+  const photos = rows
+    .map((r) => photoFrom(r.path, r.note ?? '', r.album ?? '', false))
+    .filter((p): p is SelectedPhoto => p !== null);
+  if (photos.length === 0) throw new SelectionFileError('The client has not chosen any photos yet.');
+  return dedupe(photos);
 }
 
 /** Reads the file's text. `name` decides between the CSV and the plain list. */

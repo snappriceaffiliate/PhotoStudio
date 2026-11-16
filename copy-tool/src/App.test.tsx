@@ -2,6 +2,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import App from './App.tsx';
+import { readSelection } from './csv.ts';
+import { NotSignedInError } from './source.ts';
 import type { DirHandleLike } from './fs.ts';
 import { MemDir, MemFile } from './test/memfs.ts';
 
@@ -120,5 +122,66 @@ describe('the copy tool', () => {
     render(<App supported />);
     expect(screen.getByText(/Nothing is uploaded/)).toBeTruthy();
     expect(screen.getByText(/never changed or deleted/)).toBeTruthy();
+  });
+});
+
+describe('opened from an event in PickSnap', () => {
+  const EVENT = 'ef0f1067-1a18-4cc6-a2f9-7818e960b313';
+  const fromPickSnap = async () => ({
+    ...readSelection('s.txt', 'Ceremony/IMG_0001.CR3\nIMG_9000.JPG'),
+    title: 'Priya Wedding',
+  });
+
+  it('loads the client’s selection by itself and goes straight to choosing the folder', async () => {
+    const root = eventFolder();
+    render(<App supported eventId={EVENT} loadEvent={fromPickSnap} pick={async () => root as unknown as DirHandleLike} />);
+
+    expect(await screen.findByText(/Loaded from PickSnap/)).toBeTruthy();
+    expect(screen.getByText(/2 photos chosen/)).toBeTruthy();
+    expect(button('Choose folder').disabled).toBe(false); // no CSV needed
+
+    fireEvent.click(button('Choose folder'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy 3 files' }));
+    expect(await screen.findByText(/Done\. 3 files/)).toBeTruthy();
+    expect((root.find('Selected') as MemDir).list()).toEqual(['Ceremony/IMG_0001.CR3', 'Ceremony/IMG_0001.JPG', 'IMG_9000.JPG']);
+  });
+
+  it('says to log in to PickSnap when the studio is not signed in', async () => {
+    const signedOut = async () => { throw new NotSignedInError('You are not logged in to PickSnap in this browser.'); };
+    render(<App supported eventId={EVENT} loadEvent={signedOut} />);
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/not logged in to PickSnap/);
+    expect(alert.textContent).toMatch(/log in, then click the button on the event page again/);
+    expect(screen.getByRole('link', { name: 'PickSnap' }).getAttribute('href')).toBe('/');
+    expect(button('Choose folder').disabled).toBe(true);
+  });
+
+  it('shows other problems plainly and still allows a CSV', async () => {
+    const failing = async () => { throw new Error('boom'); };
+    render(<App supported eventId={EVENT} loadEvent={failing} pick={async () => eventFolder() as unknown as DirHandleLike} />);
+    expect((await screen.findByRole('alert')).textContent).toMatch(/could not be loaded from PickSnap/);
+    chooseCsv(csv(['', 'IMG_9000.JPG']));
+    expect(await screen.findByText(/1 photo chosen/)).toBeTruthy();
+    expect(button('Choose folder').disabled).toBe(false);
+  });
+
+  it('can swap to a CSV file, and start again brings the event’s selection back', async () => {
+    render(<App supported eventId={EVENT} loadEvent={fromPickSnap} pick={async () => eventFolder() as unknown as DirHandleLike} />);
+    await screen.findByText(/Loaded from PickSnap/);
+    chooseCsv(csv(['', 'IMG_9000.JPG']));
+    expect(await screen.findByText(/1 photo chosen/)).toBeTruthy();
+    expect(screen.queryByText(/Loaded from PickSnap/)).toBeNull();
+
+    fireEvent.click(button('Choose folder'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy 1 file' }));
+    await screen.findByText(/Done\./);
+    fireEvent.click(button('Start again'));
+    expect(await screen.findByText(/Loaded from PickSnap/)).toBeTruthy();
+  });
+
+  it('does not offer a loading step when it was opened without an event', () => {
+    render(<App supported eventId={null} />);
+    expect(screen.queryByText(/Loading the client/)).toBeNull();
+    expect(button('Choose CSV file')).toBeTruthy();
   });
 });

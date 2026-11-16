@@ -78,3 +78,15 @@ class TestStorageSpike:
             "/api/v1/spike/confirm", {"key": "../other/secret"}, content_type="application/json"
         )
         assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_copy_without_a_slash_goes_to_the_copy_tool(client):
+    response = client.get("/copy?event=abc")
+    assert response.status_code == 302
+    assert response["Location"] == "/copy/?event=abc"
+
+
+@pytest.mark.django_db
+def test_a_missing_copy_tool_file_is_a_404_not_the_studio_app(client):
+    assert client.get("/copy/assets/nothing.js").status_code == 404

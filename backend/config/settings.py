@@ -156,6 +156,11 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 # In the production image the built React app is copied here and collected as static files.
 FRONTEND_DIST = BASE_DIR / "frontend_dist"
 STATICFILES_DIRS = [FRONTEND_DIST] if FRONTEND_DIST.exists() else []
+# The copy tool (a separate small app) is built into the production image and served at /copy/.
+COPY_TOOL_DIST = BASE_DIR / "copy_tool_dist"
+if COPY_TOOL_DIST.exists():
+    WHITENOISE_ROOT = COPY_TOOL_DIST
+    WHITENOISE_INDEX_FILE = True
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
