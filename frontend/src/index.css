@@ -430,3 +430,28 @@ figure img, .placeholder { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; 
 .copy-callout > div { flex: 1 1 320px; }
 .copy-callout p { margin: 4px 0 0; font-size: 14px; }
 .copy-callout .button { flex: 0 0 auto; }
+
+/* Events filter, and the delete link on event cards (above the card's full-size link). */
+.filter-tabs { width: fit-content; max-width: 100%; overflow-x: auto; margin-bottom: 18px; }
+.tab .count { opacity: 0.65; font-weight: 500; margin-left: 2px; }
+.card-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.card-foot button { position: relative; z-index: 1; min-height: 32px; font-size: 13px; }
+
+/* The photos page: toolbar, select bar and photo tiles with a tick box. */
+.photos-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-bottom: 16px; }
+.inline-select { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+.inline-select select { min-height: 38px; }
+.select-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; padding: 10px 14px; margin-bottom: 14px;
+  border: 1px solid var(--line); border-radius: var(--r); background: var(--card); }
+.select-bar .danger-button { margin-left: auto; }
+.danger-button { background: var(--bad); color: var(--card); }
+.danger-button:hover:not(:disabled) { background: color-mix(in srgb, var(--bad) 85%, black); }
+.manage-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.manage-tile { position: relative; }
+.manage-tile.picked .thumb { outline: 3px solid var(--bad); outline-offset: 2px; }
+.tile-check { position: absolute; top: 6px; left: 6px; z-index: 1; display: grid; place-items: center; width: 34px; height: 34px;
+  border-radius: 8px; background: rgba(255, 255, 255, 0.92); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); cursor: pointer; }
+.tile-check input { width: 18px; height: 18px; margin: 0; cursor: pointer; }
+.tile-badge { position: absolute; top: 8px; right: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  background: var(--marigold); color: var(--on-marigold, #1c1a17); }
+.tile-name { margin: 4px 0 0; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

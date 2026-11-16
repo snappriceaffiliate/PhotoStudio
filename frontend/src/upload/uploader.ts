@@ -30,6 +30,11 @@ export interface Progress {
   phase: 'preparing' | 'uploading' | 'paused' | 'finishing' | 'done' | 'cancelled' | 'error';
   total: number;
   alreadyUploaded: number;
+  /** Photos compressed so far (or that failed to compress): moves with every photo. */
+  prepared: number;
+  /** Photos whose preview and thumbnail have both reached storage: moves with every photo. */
+  sent: number;
+  /** Photos the server has checked and accepted. */
   done: number;
   failures: Failure[];
   bytesSent: number;
@@ -100,7 +105,7 @@ export class EventUploader {
 
   constructor(onProgress: (p: Progress) => void) {
     this.onProgress = onProgress;
-    this.progress = { phase: 'preparing', total: 0, alreadyUploaded: 0, done: 0, failures: [], bytesSent: 0, startedAt: Date.now() };
+    this.progress = { phase: 'preparing', total: 0, alreadyUploaded: 0, prepared: 0, sent: 0, done: 0, failures: [], bytesSent: 0, startedAt: Date.now() };
   }
 
   pause() {
@@ -173,7 +178,14 @@ export class EventUploader {
   }
 
   private async compressBatch(pool: CompressionPool, batch: UploadFile[]) {
-    const outcomes = await Promise.all(batch.map((f) => pool.compress(f.file, f.path)));
+    const outcomes = await Promise.all(
+      batch.map((f) =>
+        pool.compress(f.file, f.path).then((outcome) => {
+          this.emit({ prepared: this.progress.prepared + 1 });
+          return outcome;
+        }),
+      ),
+    );
     const ok: { path: string; result: CompressResult }[] = [];
     for (const o of outcomes) {
       if (o.ok) ok.push({ path: o.path, result: o.result });
@@ -199,7 +211,10 @@ export class EventUploader {
         await putObject(u.preview_url, item.result.preview.blob);
         await putObject(u.thumb_url, item.result.thumb.blob);
         sent.push(u.id);
-        this.emit({ bytesSent: this.progress.bytesSent + item.result.preview.blob.size + item.result.thumb.blob.size });
+        this.emit({
+          sent: this.progress.sent + 1,
+          bytesSent: this.progress.bytesSent + item.result.preview.blob.size + item.result.thumb.blob.size,
+        });
       } catch (error) {
         this.fail(item.path, `Upload failed: ${error instanceof Error ? error.message : String(error)}`);
       }

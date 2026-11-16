@@ -62,3 +62,17 @@ def remove_archived_images(timestamp: int) -> int:
             event.save(update_fields=["photos_deleted_at", "updated_at"])
     logger.info("Removed images of %s photos from archived events", removed)
     return removed
+
+
+@app.task(name="photos.delete_event_files", retry=5)
+def delete_event_files(studio_id: str, event_id: str) -> int:
+    """Deletes every stored image of a deleted event, including unfinished uploads.
+
+    The event's rows are already gone when this runs; the files are removed here, in the
+    background, because an event can have thousands of them.
+    """
+    prefix = f"studios/{studio_id}/events/{event_id}/"
+    keys = storage.list_keys(prefix) + storage.list_keys(f"incoming/{prefix}")
+    storage.delete_keys(keys)
+    logger.info("Deleted %s stored files of event %s", len(keys), event_id)
+    return len(keys)

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /** An event's settings, albums, photo grid and the upload screen. */
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { callsTo, installBrowserMocks, mockApi, owner, press, renderApp, reply, session, typeInto } from './harness';
 
@@ -143,29 +143,94 @@ describe('the photo grid', () => {
     expect(screen.queryByText('Day/IMG_1.jpg · click to close')).toBeNull();
   });
 
-  it('loads more photos on request', async () => {
+  it('shows only the first 10 photos and links to all of them', async () => {
     const calls = mockApi(eventRoutes({
-      'GET /api/v1/events/e1/photos': (call: { query: string }) =>
-        call.query.startsWith('page=2')
-          ? { count: 3, next_page: null, results: [photo(3)] }
-          : { count: 3, next_page: 2, results: [photo(1), photo(2)] },
+      'GET /api/v1/events/e1/photos': { count: 25, next_page: 2, results: Array.from({ length: 10 }, (_, i) => photo(i + 1)) },
     }));
     renderApp('/events/e1');
-    press(await screen.findByRole('button', { name: 'Load more' }).then((b) => b.textContent!));
-    expect(await screen.findByAltText('IMG_3.jpg')).toBeTruthy();
+    expect(await screen.findByAltText('IMG_10.jpg')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull();
-    expect(calls.some((c) => c.query.startsWith('page=2'))).toBe(true);
+    expect(calls.some((c) => c.path === '/api/v1/events/e1/photos' && c.query.includes('page_size=10'))).toBe(true);
+    expect(screen.getByRole('link', { name: 'View all 25 photos' }).getAttribute('href')).toBe('/events/e1/photos');
+    expect(screen.getByText(/Showing 10 of 25/)).toBeTruthy();
   });
+});
 
-  it('filters by album', async () => {
+describe('all photos page', () => {
+  const listed = (n: number, chosen = false) => ({ ...photo(n), chosen, created_at: `2026-11-0${n}T10:00:00Z` });
+
+  it('sorts, filters by album and loads more', async () => {
     const calls = mockApi(eventRoutes({
       'GET /api/v1/events/e1/albums': [{ id: 'a1', name: 'Reception', photo_count: 1 }],
+      'GET /api/v1/events/e1/photos': (call: { query: string }) =>
+        call.query.startsWith('page=2')
+          ? { count: 3, next_page: null, results: [listed(3)] }
+          : { count: 3, next_page: 2, results: [listed(1), listed(2, true)] },
     }));
-    renderApp('/events/e1');
-    fireEvent.change(await screen.findByLabelText('Show album'), { target: { value: 'a1' } });
+    renderApp('/events/e1/photos');
+    expect(await screen.findByAltText('IMG_2.jpg')).toBeTruthy();
+    expect(screen.getByText('Chosen')).toBeTruthy();
+    press('Load more');
+    expect(await screen.findByAltText('IMG_3.jpg')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Sort'), { target: { value: '-name' } });
+    await waitFor(() => expect(calls.some((c) => c.query.includes('sort=-name'))).toBe(true));
+    fireEvent.change(screen.getByLabelText('Album'), { target: { value: 'a1' } });
     await waitFor(() => expect(calls.some((c) => c.query.includes('album=a1'))).toBe(true));
-    fireEvent.change(screen.getByLabelText('Show album'), { target: { value: 'none' } });
-    await waitFor(() => expect(calls.some((c) => c.query.includes('album=none'))).toBe(true));
+  });
+
+  it('deletes the ticked photos after a warning about chosen ones', async () => {
+    let gone = false;
+    const calls = mockApi(eventRoutes({
+      'GET /api/v1/events/e1/photos': () => ({ count: gone ? 1 : 2, next_page: null, results: gone ? [listed(2)] : [listed(1, true), listed(2)] }),
+      'POST /api/v1/events/e1/photos/delete': () => {
+        gone = true;
+        return { deleted: 1, removed_from_selection: 1 };
+      },
+    }));
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderApp('/events/e1/photos');
+    fireEvent.click(await screen.findByLabelText('Select IMG_1.jpg'));
+    press('Delete 1 photo');
+    expect(confirm.mock.calls[0][0]).toContain('chosen by the client');
+    expect(await screen.findByText(/Deleted 1 photo\. 1 was removed from the client’s selection/)).toBeTruthy();
+    expect(callsTo(calls, 'POST', '/api/v1/events/e1/photos/delete')[0].body).toEqual({ photo_ids: ['p1'] });
+    await waitFor(() => expect(screen.queryByAltText('IMG_1.jpg')).toBeNull());
+    confirm.mockRestore();
+  });
+
+  it('does nothing when the warning is cancelled, and shows a refusal', async () => {
+    const calls = mockApi(eventRoutes({
+      'GET /api/v1/events/e1/photos': { count: 1, next_page: null, results: [listed(1, true)] },
+      'POST /api/v1/events/e1/photos/delete': reply(409, { detail: 'The client has sent their selection. Let the client make changes (reopen the selection) before deleting them.' }),
+    }));
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderApp('/events/e1/photos');
+    press(await screen.findByRole('button', { name: 'Select all 1 shown' }).then((b) => b.textContent!));
+    press('Delete 1 photo');
+    expect(callsTo(calls, 'POST', '/api/v1/events/e1/photos/delete')).toHaveLength(0);
+    confirm.mockReturnValue(true);
+    press('Delete 1 photo');
+    expect((await screen.findByRole('alert')).textContent).toContain('reopen the selection');
+    confirm.mockRestore();
+  });
+
+  it('shows the photos the client chose, sorted by name', async () => {
+    const chosen = (n: number, note = '') => ({
+      photo_id: `p${n}`, relative_path: `Day/IMG_${n}.jpg`, filename: `IMG_${n}.jpg`, note, selected_at: `2026-11-0${n}T10:00:00Z`,
+      thumb_url: 'data:,', preview_url: 'data:,',
+    });
+    mockApi(eventRoutes({
+      'GET /api/v1/events/e1/selection': { count: 2, results: [chosen(2), chosen(1, 'Album cover')], duplicate_filenames: [] },
+    }));
+    renderApp('/events/e1/photos?tab=chosen');
+    expect(await screen.findByRole('tab', { name: 'Chosen by client (2)' })).toBeTruthy();
+    await screen.findByAltText('IMG_1.jpg');
+    fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'name' } });
+    await waitFor(() => {
+      const names = screen.getAllByRole('img').map((i) => i.getAttribute('alt'));
+      expect(names).toEqual(['IMG_1.jpg', 'IMG_2.jpg']);
+    });
+    expect(screen.getByText('IMG_1.jpg · Album cover')).toBeTruthy();
   });
 });
 
@@ -174,6 +239,12 @@ describe('uploading', () => {
     const input = document.querySelectorAll('input[type="file"]')[1] as HTMLInputElement;
     const list = names.map((n) => new File(['x'], n));
     fireEvent.change(input, { target: { files: list } });
+  }
+
+  /** Press Start upload, then keep the watermark as it is in the dialog. */
+  async function startUpload() {
+    press(await screen.findByRole('button', { name: 'Start upload' }).then((b) => b.textContent!));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Start upload' }));
   }
 
   function uploadRoutes() {
@@ -215,16 +286,50 @@ describe('uploading', () => {
     expect(await screen.findByText(/appears in more than one folder/)).toBeTruthy();
   });
 
-  it('offers albums and a watermark note before starting', async () => {
-    mockApi(eventRoutes({
+  it('offers albums, and asks about a watermark before starting', async () => {
+    const calls = mockApi(eventRoutes({
       'GET /api/v1/events/e1': { ...detail, watermark_enabled: true, watermark_text: 'Lens and Light' },
       'GET /api/v1/events/e1/albums': [{ id: 'a1', name: 'Reception', photo_count: 0 }],
+      'PATCH /api/v1/events/e1': (call: { body: object }) => ({ ...detail, ...call.body }),
+      'POST /api/v1/events/e1/uploads': reply(402, { detail: 'Stop here.' }),
     }));
     renderApp('/events/e1');
     await screen.findByRole('heading', { name: 'Upload photos' });
     chooseFiles(['IMG_1.jpg']);
     expect(await screen.findByLabelText('Add to album')).toBeTruthy();
-    expect(screen.getByText(/Watermark “Lens and Light” will be added/)).toBeTruthy();
+    press('Start upload');
+    const dialog = await screen.findByRole('dialog');
+    expect((within(dialog).getByLabelText('Add a watermark') as HTMLInputElement).checked).toBe(true);
+    expect((within(dialog).getByLabelText('Watermark text') as HTMLInputElement).value).toBe('Lens and Light');
+    // Cancel leaves everything as it was.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    // Turning it off is saved on the event before the upload starts.
+    press('Start upload');
+    fireEvent.click(within(await screen.findByRole('dialog')).getByLabelText('No watermark'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Start upload' }));
+    expect(await screen.findByText(/Upload stopped: Stop here\./)).toBeTruthy();
+    expect(callsTo(calls, 'PATCH', '/api/v1/events/e1')[0].body).toEqual({ watermark_enabled: false });
+  });
+
+  it('defaults the watermark to the studio name when the event has none', async () => {
+    const calls = mockApi(eventRoutes({
+      'PATCH /api/v1/events/e1': (call: { body: object }) => ({ ...detail, ...call.body }),
+      'POST /api/v1/events/e1/uploads': reply(402, { detail: 'Stop here.' }),
+    }));
+    renderApp('/events/e1');
+    await screen.findByRole('heading', { name: 'Upload photos' });
+    chooseFiles(['IMG_1.jpg']);
+    press(await screen.findByRole('button', { name: 'Start upload' }).then((b) => b.textContent!));
+    const dialog = await screen.findByRole('dialog');
+    expect((within(dialog).getByLabelText('No watermark') as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(within(dialog).getByLabelText('Add a watermark'));
+    const text = within(dialog).getByLabelText('Watermark text') as HTMLInputElement;
+    expect(text.value).not.toBe('');
+    fireEvent.change(text, { target: { value: 'Lens and Light' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Start upload' }));
+    expect(await screen.findByText(/Upload stopped/)).toBeTruthy();
+    expect(callsTo(calls, 'PATCH', '/api/v1/events/e1')[0].body).toEqual({ watermark_enabled: true, watermark_text: 'Lens and Light' });
   });
 
   it('uploads the chosen photos and says when it is done', async () => {
@@ -237,7 +342,7 @@ describe('uploading', () => {
     renderApp('/events/e1');
     await screen.findByRole('heading', { name: 'Upload photos' });
     chooseFiles(['IMG_1.jpg', 'IMG_2.jpg']);
-    press(await screen.findByRole('button', { name: 'Start upload' }).then((b) => b.textContent!));
+    await startUpload();
     expect(await screen.findByText(/Done: 2 uploaded/)).toBeTruthy();
     expect(callsTo(calls, 'POST', '/api/v1/uploads/u1/complete')).toHaveLength(1);
     expect(callsTo(calls, 'POST', '/api/v1/uploads/u1/files')[0].body).toEqual({
@@ -250,7 +355,7 @@ describe('uploading', () => {
     renderApp('/events/e1');
     await screen.findByRole('heading', { name: 'Upload photos' });
     chooseFiles(['IMG_1.jpg']);
-    press(await screen.findByRole('button', { name: 'Start upload' }).then((b) => b.textContent!));
+    await startUpload();
     expect(await screen.findByText(/Upload stopped: Your plan has ended\./)).toBeTruthy();
   });
 

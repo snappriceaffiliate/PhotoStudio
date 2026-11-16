@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import { api } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import { Field, FormMessage, useSubmit } from '../components/Form';
 import { duplicateNames, EventUploader, toUploadFiles, type Progress, type UploadFile } from '../upload/uploader';
 import { ArchivePanel, SelectionPanel } from './SelectionPanel';
@@ -81,6 +82,7 @@ export function EventPage() {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loadError, setLoadError] = useState('');
   const [photosVersion, setPhotosVersion] = useState(0);
+  const navigate = useNavigate();
 
   const load = useCallback(async () => {
     try {
@@ -121,19 +123,21 @@ export function EventPage() {
           {event.status !== 'archived' && <UploadPanel
             event={event}
             albums={albums}
+            onEventChange={setEvent}
             onProgress={() => setPhotosVersion((v) => v + 1)}
             onFinished={() => {
               void load();
               setPhotosVersion((v) => v + 1);
             }}
           />}
-          <PhotoGrid eventId={event.id} albums={albums} version={photosVersion} />
+          <PhotoGrid eventId={event.id} version={photosVersion} />
         </div>
         <aside>
           <SharePanel event={event} onChanged={() => { void load(); setPhotosVersion((v) => v + 1); }} />
           <SettingsPanel event={event} onSaved={setEvent} />
           <AlbumsPanel eventId={event.id} albums={albums} onChanged={load} />
-          <ArchivePanel eventId={event.id} status={event.status} onChanged={() => { void load(); setPhotosVersion((v) => v + 1); }} />
+          <ArchivePanel eventId={event.id} title={event.title} status={event.status}
+            onChanged={() => { void load(); setPhotosVersion((v) => v + 1); }} onDeleted={() => navigate('/events')} />
         </aside>
       </div>
     </>
@@ -222,12 +226,18 @@ function AlbumsPanel({ eventId, albums, onChanged }: { eventId: string; albums: 
   );
 }
 
-function UploadPanel({ event, albums, onProgress, onFinished }: {
+function UploadPanel({ event, albums, onEventChange, onProgress, onFinished }: {
   event: EventDetail;
   albums: Album[];
+  onEventChange: (event: EventDetail) => void;
   onProgress: () => void;
   onFinished: () => void;
 }) {
+  const { user } = useAuth();
+  const [asking, setAsking] = useState(false);
+  const [watermarkOn, setWatermarkOn] = useState(false);
+  const [watermarkText, setWatermarkText] = useState('');
+  const [watermarkError, setWatermarkError] = useState('');
   const folderInput = useRef<HTMLInputElement>(null);
   const uploader = useRef<EventUploader | null>(null);
   const [files, setFiles] = useState<UploadFile[]>([]);
@@ -253,7 +263,31 @@ function UploadPanel({ event, albums, onProgress, onFinished }: {
     setProgress(null);
   }
 
-  async function start() {
+  /** Before every upload, ask whether to watermark the previews (default: the event's setting). */
+  function askWatermark() {
+    setWatermarkOn(event.watermark_enabled);
+    setWatermarkText(event.watermark_text || user?.studio?.name || '');
+    setWatermarkError('');
+    setAsking(true);
+  }
+
+  async function confirmAndStart() {
+    const text = watermarkText.trim();
+    const changed = watermarkOn !== event.watermark_enabled || (watermarkOn && text !== event.watermark_text);
+    if (changed) {
+      try {
+        const body = watermarkOn ? { watermark_enabled: true, watermark_text: text } : { watermark_enabled: false };
+        onEventChange(await api<EventDetail>(`/events/${event.id}`, { method: 'PATCH', body }));
+      } catch (err) {
+        setWatermarkError(err instanceof Error ? err.message : 'Could not save the watermark.');
+        return;
+      }
+    }
+    setAsking(false);
+    void start(watermarkOn ? text : undefined);
+  }
+
+  async function start(watermark: string | undefined) {
     const run = new EventUploader((p) => {
       setProgress(p);
       if (Date.now() - lastRefresh.current > 5000) {
@@ -264,18 +298,21 @@ function UploadPanel({ event, albums, onProgress, onFinished }: {
     uploader.current = run;
     await run.run(event.id, files, {
       albumId: albumId || null,
-      watermark: event.watermark_enabled ? event.watermark_text : undefined,
+      watermark,
     });
     onFinished();
   }
 
   const dupes = duplicateNames(files);
   const remaining = progress ? progress.total - progress.alreadyUploaded : 0;
-  const finished = progress ? progress.done + progress.failures.length : 0;
+  // Each photo counts twice: once when it is prepared (compressed), once when it is sent.
+  const finished = progress ? progress.sent : 0;
   const elapsed = progress ? (Date.now() - progress.startedAt) / 1000 : 0;
   const perSecond = elapsed > 0 ? finished / elapsed : 0;
   const eta = perSecond > 0 ? (remaining - finished) / perSecond : NaN;
-  const percent = remaining > 0 ? Math.round((finished / remaining) * 100) : progress?.phase === 'done' ? 100 : 0;
+  const percent = progress?.phase === 'done'
+    ? 100
+    : remaining > 0 ? Math.min(100, Math.round(((progress!.prepared + progress!.sent) / (2 * remaining)) * 100)) : 0;
 
   return (
     <section className="panel">
@@ -317,8 +354,37 @@ function UploadPanel({ event, albums, onProgress, onFinished }: {
               </select>
             </div>
           )}
-          {event.watermark_enabled && <p className="muted">Watermark “{event.watermark_text}” will be added to previews.</p>}
-          <button onClick={start}>Start upload</button>
+          <button onClick={askWatermark}>Start upload</button>
+        </div>
+      )}
+
+      {asking && (
+        <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="watermark-title">
+          <div className="dialog">
+            <h2 id="watermark-title">Add a watermark?</h2>
+            <p className="muted">
+              The watermark is drawn on the previews your client sees, in the bottom corner. Your originals are not changed.
+            </p>
+            <label className="check">
+              <input type="radio" name="watermark" checked={!watermarkOn} onChange={() => setWatermarkOn(false)} />
+              No watermark
+            </label>
+            <label className="check">
+              <input type="radio" name="watermark" checked={watermarkOn} onChange={() => setWatermarkOn(true)} />
+              Add a watermark
+            </label>
+            {watermarkOn && (
+              <Field label="Watermark text" name="watermark_choice" maxLength={80} hint="Usually your studio name."
+                value={watermarkText} onChange={(e) => setWatermarkText(e.target.value)} />
+            )}
+            {watermarkError && <p className="form-error" role="alert">{watermarkError}</p>}
+            <div className="actions">
+              <button type="button" onClick={confirmAndStart} disabled={watermarkOn && !watermarkText.trim()}>
+                Start upload
+              </button>
+              <button type="button" className="secondary" onClick={() => setAsking(false)}>Cancel</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -330,7 +396,7 @@ function UploadPanel({ event, albums, onProgress, onFinished }: {
           <p>
             {progress.phase === 'preparing' && 'Preparing…'}
             {(progress.phase === 'uploading' || progress.phase === 'paused') &&
-              `${progress.done} of ${remaining} uploaded${progress.phase === 'paused' ? ' · paused' : ''}${eta ? ` · about ${formatDuration(eta)} left` : ''}`}
+              `${progress.sent} of ${remaining} uploaded · ${progress.prepared} prepared${progress.phase === 'paused' ? ' · paused' : ''}${eta ? ` · about ${formatDuration(eta)} left` : ''}`}
             {progress.phase === 'finishing' && 'Finishing…'}
             {progress.phase === 'done' && `Done: ${progress.done} uploaded.`}
             {progress.phase === 'cancelled' && `Stopped after ${progress.done} photos. Choose the folder again to continue.`}
@@ -360,49 +426,31 @@ function UploadPanel({ event, albums, onProgress, onFinished }: {
   );
 }
 
-function PhotoGrid({ eventId, albums, version }: { eventId: string; albums: Album[]; version: number }) {
-  const [album, setAlbum] = useState('');
+/** How many photos the event page shows; the rest are on the photos page. */
+export const PREVIEW_COUNT = 10;
+
+function PhotoGrid({ eventId, version }: { eventId: string; version: number }) {
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [count, setCount] = useState(0);
-  const [nextPage, setNextPage] = useState<number | null>(null);
   const [open, setOpen] = useState<PhotoItem | null>(null);
-
-  const fetchPage = useCallback(
-    (page: number) => api<PhotoPage>(`/events/${eventId}/photos?page=${page}&page_size=60${album ? `&album=${album}` : ''}`),
-    [eventId, album],
-  );
 
   useEffect(() => {
     let current = true;
-    fetchPage(1).then((data) => {
+    api<PhotoPage>(`/events/${eventId}/photos?page=1&page_size=${PREVIEW_COUNT}`).then((data) => {
       if (!current) return;
       setPhotos(data.results);
       setCount(data.count);
-      setNextPage(data.next_page);
     });
     return () => {
       current = false;
     };
-  }, [fetchPage, version]);
-
-  async function more() {
-    if (!nextPage) return;
-    const data = await fetchPage(nextPage);
-    setPhotos((p) => [...p, ...data.results]);
-    setNextPage(data.next_page);
-  }
+  }, [eventId, version]);
 
   return (
     <section>
       <div className="page-header">
         <h2>Photos <span className="muted">({count})</span></h2>
-        {albums.length > 0 && (
-          <select aria-label="Show album" value={album} onChange={(e) => setAlbum(e.target.value)}>
-            <option value="">All photos</option>
-            {albums.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            <option value="none">Not in an album</option>
-          </select>
-        )}
+        {count > 0 && <Link className="button secondary" to={`/events/${eventId}/photos`}>View all {count} photos</Link>}
       </div>
       {count === 0 && <div className="empty"><p>No photos yet. Upload the event folder above.</p></div>}
       <ul className="photo-grid">
@@ -414,7 +462,11 @@ function PhotoGrid({ eventId, albums, version }: { eventId: string; albums: Albu
           </li>
         ))}
       </ul>
-      {nextPage && <div className="actions center"><button className="secondary" onClick={more}>Load more</button></div>}
+      {count > photos.length && (
+        <p className="muted">
+          Showing {photos.length} of {count}. <Link to={`/events/${eventId}/photos`}>See them all, sort them or delete some</Link>.
+        </p>
+      )}
       {open && (
         <div className="lightbox" onClick={() => setOpen(null)}>
           <img src={open.preview_url} alt={open.original_filename} />

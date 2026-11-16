@@ -1,8 +1,10 @@
+from django.db import transaction
 from django.db.models import Count, OuterRef, Q, Subquery
 from rest_framework import serializers, status, viewsets
 from rest_framework.response import Response
 
 from apps.accounts.permissions import IsStudioMember
+from apps.audit.models import record
 from apps.billing import entitlements
 from apps.core import storage
 from apps.core.validators import single_line
@@ -61,7 +63,7 @@ class EventViewSet(viewsets.ModelViewSet):
 
     serializer_class = EventSerializer
     permission_classes = [IsStudioMember]
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
         from apps.photos.models import Photo
@@ -78,6 +80,28 @@ class EventViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         entitlements.check_event_limit(self.request.studio_id)
         serializer.save(studio_id=self.request.studio_id, created_by=self.request.user)
+
+    def destroy(self, request, *args, **kwargs):
+        """Deletes the event with its photos, client logins and selection. Owner only.
+
+        The rows go now; the stored images are deleted by a background job.
+        """
+        from apps.photos import tasks
+
+        if not request.user.is_owner:
+            return Response(
+                {"detail": "Only the studio owner can delete an event."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        event = self.get_object()
+        studio_id, event_id = str(event.studio_id), str(event.pk)
+        with transaction.atomic():
+            record(request, "event.deleted", None, f"{event.title} ({event.photo_count} photos)")
+            event.delete()
+            transaction.on_commit(
+                lambda: tasks.delete_event_files.defer(studio_id=studio_id, event_id=event_id)
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class AlbumSerializer(serializers.ModelSerializer):
