@@ -130,6 +130,7 @@ needs a new Razorpay plan; existing subscribers stay on the old one.
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` | from the email service | Yes |
 | `EMAIL_USE_TLS` | `true` | Yes |
 | `DEFAULT_FROM_EMAIL` | `PickSnap <noreply@yourdomain>` | Yes |
+| `CLIENT_EMAIL_SHARING`, `REQUIRE_VERIFIED_EMAIL_TO_SHARE` | `false` until email works, then `true` | Optional (both off: WhatsApp-only sharing, no email check) |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | from Razorpay API keys (test or live) | For payments |
 | `RAZORPAY_WEBHOOK_SECRET` | the secret you set on the webhook | For payments |
 | `TRIAL_DAYS` | `30` | Optional |

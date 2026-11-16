@@ -24,6 +24,14 @@ def _plain_http(settings):
 
 
 @pytest.fixture(autouse=True)
+def _email_sharing_on(settings):
+    """Most tests were written for sharing by email too; test_whatsapp_only.py covers the
+    WhatsApp-only defaults (both settings off)."""
+    settings.CLIENT_EMAIL_SHARING = True
+    settings.REQUIRE_VERIFIED_EMAIL_TO_SHARE = True
+
+
+@pytest.fixture(autouse=True)
 def _clean_state(request):
     """Reset rate-limit counters and tenant settings so tests never leak into each other."""
     yield

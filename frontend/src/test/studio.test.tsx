@@ -196,6 +196,25 @@ describe('an event', () => {
     expect(screen.queryByText('Abcd-Efgh-1234')).toBeNull();
   });
 
+  it('shares by WhatsApp only when the server has no client email', async () => {
+    const whatsappOnly = { ...owner, sharing: { client_email: false, confirm_email_first: false } };
+    const calls = mockApi({
+      ...eventRoutes(),
+      ...session(whatsappOnly).routes,
+      'POST /api/v1/events/e1/clients': reply(201, { ...client, password: 'Abcd-Efgh-1234' }),
+    });
+    renderApp('/events/e1');
+    await screen.findByRole('heading', { name: 'Client' });
+    expect(screen.queryByLabelText('Client email (optional)')).toBeNull();
+    expect(screen.getByText(/You send it on WhatsApp/)).toBeTruthy();
+    expect(screen.getByLabelText('Client WhatsApp number').hasAttribute('required')).toBe(true);
+    typeInto('Client name', 'Priya Rao');
+    typeInto('Client WhatsApp number', '98765 43210');
+    press('Share with client');
+    expect(await screen.findByRole('link', { name: 'Send on WhatsApp' })).toBeTruthy();
+    expect(callsTo(calls, 'POST', '/api/v1/events/e1/clients')[0].body).toMatchObject({ client_name: 'Priya Rao', phone: '98765 43210' });
+  });
+
   it('asks for a contact before sharing and shows the server message', async () => {
     mockApi(eventRoutes({
       'POST /api/v1/events/e1/clients': reply(400, { email: ["Enter the client's email, WhatsApp number, or both."] }),
