@@ -78,6 +78,26 @@ def delete_object(key: str) -> None:
     internal_client().delete_object(Bucket=settings.S3_BUCKET, Key=key)
 
 
+def list_keys(prefix: str) -> list[str]:
+    """Every stored key that starts with `prefix`."""
+    paginator = internal_client().get_paginator("list_objects_v2")
+    keys: list[str] = []
+    for page in paginator.paginate(Bucket=settings.S3_BUCKET, Prefix=prefix):
+        keys.extend(item["Key"] for item in page.get("Contents", []))
+    return keys
+
+
+def delete_keys(keys: list[str]) -> None:
+    """Deletes many objects, 1,000 per request (the S3 and R2 limit)."""
+    client = internal_client()
+    for start in range(0, len(keys), 1000):
+        chunk = keys[start : start + 1000]
+        client.delete_objects(
+            Bucket=settings.S3_BUCKET,
+            Delete={"Objects": [{"Key": key} for key in chunk], "Quiet": True},
+        )
+
+
 def read_prefix(key: str, length: int = 12) -> bytes:
     """The first bytes of a stored object, to check what kind of file it really is."""
     try:

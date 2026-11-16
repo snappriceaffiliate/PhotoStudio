@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { api } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
+import { deleteEventAfterConfirm } from './eventActions';
+
+const PREVIEW_COUNT = 10;
 
 interface SelectedPhoto {
   photo_id: string;
@@ -90,7 +95,7 @@ export function SelectionPanel({ eventId, version, status }: { eventId: string; 
         </>
       )}
       <ul className="photo-grid small">
-        {data.results.map((p) => (
+        {data.results.slice(0, PREVIEW_COUNT).map((p) => (
           <li key={p.photo_id}>
             {p.thumb_url ? (
               <button className="thumb" onClick={() => setOpen(p)} title={`${p.relative_path}${p.note ? ` · ${p.note}` : ''}`}>
@@ -102,6 +107,12 @@ export function SelectionPanel({ eventId, version, status }: { eventId: string; 
           </li>
         ))}
       </ul>
+      {data.count > PREVIEW_COUNT && (
+        <p className="muted">
+          Showing {PREVIEW_COUNT} of {data.count}.{' '}
+          <Link to={`/events/${eventId}/photos?tab=chosen`}>View all {data.count} chosen photos</Link>
+        </p>
+      )}
       {open?.preview_url && (
         <div className="lightbox" onClick={() => setOpen(null)}>
           <img src={open.preview_url} alt={open.filename} />
@@ -113,8 +124,24 @@ export function SelectionPanel({ eventId, version, status }: { eventId: string; 
 }
 
 /** Archive closes the client gallery; images are removed 90 days later. */
-export function ArchivePanel({ eventId, status, onChanged }: { eventId: string; status: string; onChanged: () => void }) {
+export function ArchivePanel({ eventId, title, status, onChanged, onDeleted }: {
+  eventId: string;
+  title: string;
+  status: string;
+  onChanged: () => void;
+  onDeleted: () => void;
+}) {
+  const { user } = useAuth();
   const [error, setError] = useState('');
+
+  async function remove() {
+    setError('');
+    try {
+      if (await deleteEventAfterConfirm({ id: eventId, title })) onDeleted();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete the event.');
+    }
+  }
   const archived = status === 'archived';
 
   async function toggle() {
@@ -140,7 +167,10 @@ export function ArchivePanel({ eventId, status, onChanged }: { eventId: string; 
           : 'When printing is done, archive the event to close the gallery and free storage later.'}
       </p>
       {error && <p className="form-error">{error}</p>}
-      <button className="secondary" onClick={toggle}>{archived ? 'Reopen event' : 'Archive event'}</button>
+      <div className="actions">
+        <button className="secondary" onClick={toggle}>{archived ? 'Reopen event' : 'Archive event'}</button>
+        {user?.role === 'owner' && <button className="link danger" onClick={remove}>Delete event</button>}
+      </div>
     </div>
   );
 }

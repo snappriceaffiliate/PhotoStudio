@@ -152,6 +152,20 @@ describe('a successful upload', () => {
     expect(seen.map((p) => p.phase)).toContain('finishing');
     expect(seen[seen.length - 1].bytesSent).toBeGreaterThan(0);
   });
+
+  it('counts each photo once when prepared and once when sent', async () => {
+    const { seen } = await run(files(3));
+    expect(seen[0]).toMatchObject({ prepared: 0, sent: 0 });
+    const last = seen[seen.length - 1];
+    expect(last).toMatchObject({ prepared: 3, sent: 3 });
+    // Never sent before prepared, and the counts only go up.
+    for (let i = 1; i < seen.length; i++) {
+      expect(seen[i].sent).toBeLessThanOrEqual(seen[i].prepared);
+      expect(seen[i].prepared).toBeGreaterThanOrEqual(seen[i - 1].prepared);
+      expect(seen[i].sent).toBeGreaterThanOrEqual(seen[i - 1].sent);
+    }
+    expect(new Set(seen.map((p) => p.sent)).size).toBeGreaterThan(2); // it moves photo by photo
+  });
 });
 
 describe('resuming', () => {

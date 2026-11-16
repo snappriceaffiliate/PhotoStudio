@@ -6,6 +6,7 @@ import { ClientLoginPage, GalleryPage } from './gallery/GalleryPages';
 import { BillingPage } from './pages/BillingPage';
 import { BrandingPage } from './pages/BrandingPage';
 import { EventPage } from './pages/EventPage';
+import { EventPhotosPage } from './pages/EventPhotosPage';
 import { EventsPage, StaffPage } from './pages/StudioPages';
 
 // The Sprint 0 spike page is only bundled into development builds.
@@ -25,6 +26,7 @@ export default function App() {
       <Route element={<StudioLayout />}>
         <Route path="/events" element={<EventsPage />} />
         <Route path="/events/:eventId" element={<EventPage />} />
+        <Route path="/events/:eventId/photos" element={<EventPhotosPage />} />
         <Route path="/staff" element={<StaffPage />} />
         <Route path="/branding" element={<BrandingPage />} />
         <Route path="/billing" element={<BillingPage />} />

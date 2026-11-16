@@ -14,7 +14,7 @@ import uuid
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Exists, Max, OuterRef
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import serializers, status
@@ -23,7 +23,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsStudioMember
+from apps.audit.models import record
 from apps.billing import entitlements
+from apps.clients.models import Selection
 from apps.core import storage
 from apps.core.validators import safe_relative_path
 from apps.events.models import Album, Event
@@ -33,6 +35,14 @@ from .models import Photo, UploadSession
 FILES_PER_CALL = 2000
 PHOTOS_PER_BATCH = 50
 PAGE_SIZE_MAX = 200
+DELETE_PER_CALL = 500
+SORTS = {
+    "": ("sort_order", "relative_path"),
+    "name": ("relative_path",),
+    "-name": ("-relative_path",),
+    "newest": ("-created_at", "relative_path"),
+    "oldest": ("created_at", "relative_path"),
+}
 
 
 class FileEntry(serializers.Serializer):
@@ -273,8 +283,15 @@ class PhotoListView(StudioView):
             size = min(PAGE_SIZE_MAX, max(1, int(request.query_params.get("page_size", 100))))
         except ValueError:
             return Response({"detail": "page and page_size must be numbers."}, status=400)
-        photos = Photo.objects.for_studio(request.studio_id).filter(
-            event=event, status=Photo.Status.READY
+        sort = request.query_params.get("sort", "")
+        if sort not in SORTS:
+            return Response({"detail": "sort must be name, -name, newest or oldest."}, status=400)
+        chosen = Selection.objects.for_studio(request.studio_id).filter(photo=OuterRef("pk"))
+        photos = (
+            Photo.objects.for_studio(request.studio_id)
+            .filter(event=event, status=Photo.Status.READY)
+            .annotate(chosen=Exists(chosen))
+            .order_by(*SORTS[sort])
         )
         album = request.query_params.get("album")
         if album and album != "none" and not _is_uuid(album):
@@ -298,6 +315,8 @@ class PhotoListView(StudioView):
                         "album": str(p.album_id) if p.album_id else None,
                         "width": p.width,
                         "height": p.height,
+                        "chosen": p.chosen,
+                        "created_at": p.created_at,
                         "thumb_url": storage.signed_download_url(p.thumb_key),
                         "preview_url": storage.signed_download_url(p.preview_key),
                     }
@@ -305,3 +324,45 @@ class PhotoListView(StudioView):
                 ],
             }
         )
+
+
+class DeleteRequest(serializers.Serializer):
+    photo_ids = serializers.ListField(
+        child=serializers.UUIDField(), allow_empty=False, max_length=DELETE_PER_CALL
+    )
+
+
+class PhotoDeleteView(StudioView):
+    """POST /events/{id}/photos/delete {photo_ids}: removes photos and their stored images.
+
+    Photos the client has chosen are removed from the selection too, but not once the
+    selection has been sent: the studio must reopen it first.
+    """
+
+    def post(self, request, event_id):
+        event = _event(request, event_id)
+        data = DeleteRequest(data=request.data)
+        data.is_valid(raise_exception=True)
+        photos = Photo.objects.for_studio(request.studio_id).filter(
+            event=event, pk__in=data.validated_data["photo_ids"]
+        )
+        chosen = (
+            Selection.objects.for_studio(request.studio_id)
+            .filter(event=event, photo__in=photos)
+            .count()
+        )
+        if chosen and event.status == Event.Status.SUBMITTED:
+            return Response(
+                {
+                    "detail": f"{chosen} of these photos are in the selection the client sent. "
+                    "Let the client make changes (reopen the selection) before deleting them."
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        keys = [key for p in photos for key in (p.preview_key, p.thumb_key) if key]
+        count = photos.count()
+        with transaction.atomic():
+            photos.delete()  # their selections go with them
+            record(request, "photos.deleted", event, f"{count} photos, {chosen} chosen")
+            transaction.on_commit(lambda: storage.delete_keys(keys))
+        return Response({"deleted": count, "removed_from_selection": chosen})

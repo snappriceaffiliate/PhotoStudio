@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { Field, FormMessage, useSubmit } from '../components/Form';
 import { PhotosIcon } from '../components/Brand';
 import { STATUS_LABELS } from './EventPage';
+import { deleteEventAfterConfirm } from './eventActions';
 
 interface EventItem {
   id: string;
@@ -39,8 +40,29 @@ function useList<T>(path: string) {
   return { items, error, reload: load };
 }
 
+const FILTERS: { key: string; label: string; test: (e: EventItem) => boolean }[] = [
+  { key: 'all', label: 'All', test: () => true },
+  { key: 'active', label: 'Active', test: (e) => ['uploading', 'shared', 'submitted'].includes(e.status) },
+  { key: 'draft', label: 'Draft', test: (e) => e.status === 'draft' },
+  { key: 'archived', label: 'Archived', test: (e) => e.status === 'archived' },
+];
+
 export function EventsPage() {
+  const { user } = useAuth();
   const { items, error, reload } = useList<EventItem>('/events');
+  const [filter, setFilter] = useState('all');
+  const [deleteError, setDeleteError] = useState('');
+  const current = FILTERS.find((f) => f.key === filter) ?? FILTERS[0];
+  const shown = items?.filter(current.test) ?? null;
+
+  async function remove(event: EventItem) {
+    setDeleteError('');
+    try {
+      if (await deleteEventAfterConfirm(event)) reload();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Could not delete the event.');
+    }
+  }
   const [form, setForm] = useState({ title: '', event_date: '', selection_limit: '' });
   const [open, setOpen] = useState(false);
   const submit = useSubmit(async () => {
@@ -84,7 +106,17 @@ export function EventsPage() {
         </form>
       )}
 
-      <FormMessage error={error} />
+      <FormMessage error={error || deleteError} />
+      {items && items.length > 0 && (
+        <div className="tabs filter-tabs" role="tablist" aria-label="Show events">
+          {FILTERS.map((f) => (
+            <button key={f.key} role="tab" aria-selected={filter === f.key} className={filter === f.key ? 'tab active' : 'tab'}
+              onClick={() => setFilter(f.key)}>
+              {f.label} <span className="count">{items.filter(f.test).length}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {items === null && !error && <p className="muted">Loading events…</p>}
       {items?.length === 0 && (
         <div className="empty">
@@ -93,9 +125,12 @@ export function EventsPage() {
           <p>Create an event for each shoot, then upload its folder of photos.</p>
         </div>
       )}
-      {items && items.length > 0 && (
+      {items && items.length > 0 && shown?.length === 0 && (
+        <p className="muted">No {current.label.toLowerCase()} events.</p>
+      )}
+      {shown && shown.length > 0 && (
         <ul className="cards">
-          {items.map((e) => (
+          {shown.map((e) => (
             <li key={e.id} className="card-item">
               <div className="card-cover">
                 {e.cover_url ? <img src={e.cover_url} alt="" loading="lazy" /> : <PhotosIcon size={44} />}
@@ -117,7 +152,12 @@ export function EventsPage() {
                     </p>
                   </>
                 )}
-                <span className={`status status-${e.status}`}>{STATUS_LABELS[e.status] ?? e.status}</span>
+                <div className="card-foot">
+                  <span className={`status status-${e.status}`}>{STATUS_LABELS[e.status] ?? e.status}</span>
+                  {user?.role === 'owner' && (
+                    <button type="button" className="link danger" onClick={() => remove(e)} aria-label={`Delete ${e.title}`}>Delete</button>
+                  )}
+                </div>
               </div>
             </li>
           ))}

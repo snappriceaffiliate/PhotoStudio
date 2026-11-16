@@ -20,9 +20,61 @@ describe('events', () => {
     expect(screen.getByText('50 of 200 chosen by the client')).toBeTruthy();
     expect(screen.getByText('1240 photos', { exact: false })).toBeTruthy();
     expect(screen.getByText('Shared with client')).toBeTruthy();
-    expect(screen.getByText('Draft')).toBeTruthy();
+    expect(screen.getAllByText('Draft').length).toBeGreaterThan(0);
     // No progress line for an event nobody has chosen from.
     expect(screen.getAllByText(/chosen by the client/)).toHaveLength(1);
+  });
+
+  it('filters events into active, draft and archived', async () => {
+    mockApi({ ...session(owner).routes, 'GET /api/v1/events': [
+      eventRow,
+      { ...eventRow, id: 'e2', title: 'Baby Shower', status: 'draft' },
+      { ...eventRow, id: 'e3', title: 'Old Birthday', status: 'archived' },
+    ] });
+    renderApp('/events');
+    await screen.findByRole('link', { name: 'Baby Shower' });
+    const tab = (name: RegExp) => screen.getByRole('tab', { name });
+    expect(tab(/^All/).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(tab(/^Active/));
+    expect(screen.getByRole('link', { name: 'Priya and Arun Wedding' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Baby Shower' })).toBeNull();
+    fireEvent.click(tab(/^Draft/));
+    expect(screen.getByRole('link', { name: 'Baby Shower' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Old Birthday' })).toBeNull();
+    fireEvent.click(tab(/^Archived/));
+    expect(screen.getByRole('link', { name: 'Old Birthday' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Priya and Arun Wedding' })).toBeNull();
+  });
+
+  it('deletes an event only when its name is typed', async () => {
+    let gone = false;
+    const calls = mockApi({
+      ...session(owner).routes,
+      'GET /api/v1/events': () => (gone ? [] : [eventRow]),
+      'DELETE /api/v1/events/e1': () => {
+        gone = true;
+        return reply(204);
+      },
+    });
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValueOnce('wrong name').mockReturnValueOnce('Priya and Arun Wedding');
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    renderApp('/events');
+    const del = await screen.findByRole('button', { name: 'Delete Priya and Arun Wedding' });
+    fireEvent.click(del);
+    expect(alert).toHaveBeenCalled();
+    expect(callsTo(calls, 'DELETE', '/api/v1/events/e1')).toHaveLength(0);
+    fireEvent.click(del);
+    expect(await screen.findByRole('heading', { name: 'No events yet' })).toBeTruthy();
+    expect(callsTo(calls, 'DELETE', '/api/v1/events/e1')).toHaveLength(1);
+    prompt.mockRestore();
+    alert.mockRestore();
+  });
+
+  it('does not offer delete to staff', async () => {
+    mockApi({ ...session(staff).routes, 'GET /api/v1/events': [eventRow] });
+    renderApp('/events');
+    await screen.findByRole('link', { name: 'Priya and Arun Wedding' });
+    expect(screen.queryByRole('button', { name: /^Delete/ })).toBeNull();
   });
 
   it('shows a welcoming empty state', async () => {
@@ -319,6 +371,31 @@ describe('an event', () => {
     renderApp('/events/e1');
     await screen.findByText('(1 photos)');
     expect(screen.queryByRole('link', { name: 'Copy selected files to local' })).toBeNull();
+  });
+
+  it('shows the first 10 chosen photos and links to all of them', async () => {
+    const results = Array.from({ length: 12 }, (_, i) => ({
+      photo_id: `p${i}`, relative_path: `W/IMG_${i}.jpg`, filename: `IMG_${i}.jpg`, note: '', thumb_url: 'data:,', preview_url: 'data:,',
+    }));
+    mockApi(eventRoutes({
+      'GET /api/v1/events/e1': { ...detail, status: 'submitted' },
+      'GET /api/v1/events/e1/selection': { count: 12, duplicate_filenames: [], results },
+    }));
+    renderApp('/events/e1');
+    expect(await screen.findByAltText('IMG_9.jpg')).toBeTruthy();
+    expect(screen.queryByAltText('IMG_10.jpg')).toBeNull();
+    expect(screen.getByRole('link', { name: /View all 12 chosen photos/ }).getAttribute('href')).toBe('/events/e1/photos?tab=chosen');
+  });
+
+  it('the owner can delete the event from its page, after typing its name', async () => {
+    const calls = mockApi(eventRoutes({ 'DELETE /api/v1/events/e1': reply(204), 'GET /api/v1/events': [] }));
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('Priya and Arun Wedding');
+    renderApp('/events/e1');
+    await screen.findByRole('heading', { name: 'Priya and Arun Wedding' });
+    fireEvent.click(screen.getByRole('button', { name: 'Delete event' }));
+    expect(await screen.findByRole('heading', { name: 'No events yet' })).toBeTruthy();
+    expect(callsTo(calls, 'DELETE', '/api/v1/events/e1')).toHaveLength(1);
+    prompt.mockRestore();
   });
 
   it('archives only after confirmation', async () => {
