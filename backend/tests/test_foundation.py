@@ -44,10 +44,10 @@ class TestStorageSpike:
     def spike_urls(self, settings):
         settings.ROOT_URLCONF = "tests.urls_with_spikes"
 
-    def test_upload_url_refuses_images_over_100_kb(self, client):
+    def test_upload_url_refuses_images_over_the_limit(self, client):
         response = client.post(
             "/api/v1/spike/upload-url",
-            {"filename": "a.webp", "content_type": "image/webp", "size": 100 * 1024 + 1},
+            {"filename": "a.webp", "content_type": "image/webp", "size": 40 * 1024 + 1},
             content_type="application/json",
         )
         assert response.status_code == 400
@@ -56,7 +56,7 @@ class TestStorageSpike:
     def test_upload_url_signs_a_put_for_a_safe_key(self, client):
         response = client.post(
             "/api/v1/spike/upload-url",
-            {"filename": "DSC 0001 (2).webp", "content_type": "image/webp", "size": 80_000},
+            {"filename": "DSC 0001 (2).webp", "content_type": "image/webp", "size": 30_000},
             content_type="application/json",
         )
         assert response.status_code == 200

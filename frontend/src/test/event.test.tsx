@@ -12,7 +12,7 @@ vi.mock('../compression/pool', () => ({
     compress(file: File, path: string) {
       return Promise.resolve({
         ok: true, file, path,
-        result: { source: 'jpeg', preview: { blob: new Blob(['p']), width: 10, height: 10 }, thumb: { blob: new Blob(['t']), width: 5, height: 5 } },
+        result: { source: 'jpeg', preview: { blob: new Blob(['p']), width: 10, height: 10 } },
       });
     }
     terminate() {}
@@ -37,6 +37,7 @@ function eventRoutes(extra: Record<string, unknown> = {}) {
     'GET /api/v1/events/e1/selection': { count: 0, results: [], duplicate_filenames: [] },
     'GET /api/v1/events/e1/clients': [],
     'GET /api/v1/events/e1/progress': { status: 'draft', selection_limit: 3, selected: 0, submitted_at: null, last_client_login: null },
+    'GET /api/v1/events/e1/drive-imports': { enabled: false, imports: [] },
     ...extra,
   };
 }
@@ -254,7 +255,7 @@ describe('uploading', () => {
         files: call.body.files.map((f) => ({ id: `id:${f.relative_path}`, relative_path: f.relative_path, status: 'pending' })),
       }),
       'POST /api/v1/uploads/u1/urls': (call: { body: { photo_ids: string[] } }) => ({
-        urls: call.body.photo_ids.map((id) => ({ id, preview_url: `https://r2.test/${id}/p`, thumb_url: `https://r2.test/${id}/t` })),
+        urls: call.body.photo_ids.map((id) => ({ id, url: `https://r2.test/${id}/image` })),
       }),
       'POST /api/v1/uploads/u1/confirm': (call: { body: { photos: { id: string }[] } }) => ({
         results: call.body.photos.map((p) => ({ id: p.id, relative_path: p.id.replace('id:', ''), status: 'ready', failure_reason: '' })),
@@ -357,6 +358,67 @@ describe('uploading', () => {
     chooseFiles(['IMG_1.jpg']);
     await startUpload();
     expect(await screen.findByText(/Upload stopped: Your plan has ended\./)).toBeTruthy();
+  });
+
+  describe('from Google Drive', () => {
+    const job = (patch: object = {}) => ({
+      id: 'd1', folder_name: 'Wedding', status: 'running', total: 10, imported: 3, skipped: 2, failed: 0,
+      failures: [], error: '', ...patch,
+    });
+
+    it('is hidden until the server has a Google key', async () => {
+      mockApi(eventRoutes({ 'GET /api/v1/events/e1/drive-imports': { enabled: false, imports: [] } }));
+      renderApp('/events/e1');
+      await screen.findByRole('heading', { name: 'Upload photos' });
+      expect(screen.queryByLabelText('Google Drive folder link')).toBeNull();
+    });
+
+    it('asks about the watermark, starts the import and follows it to the end', async () => {
+      let polls = 0;
+      const calls = mockApi(eventRoutes({
+        'GET /api/v1/events/e1/drive-imports': () => {
+          polls += 1;
+          if (polls === 1) return { enabled: true, imports: [] };
+          return { enabled: true, imports: [polls === 2 ? job() : job({ status: 'done', imported: 7, failed: 1,
+            failures: [{ path: 'Day/A.NEF', reason: 'Google has no preview of this file.' }] })] };
+        },
+        'POST /api/v1/events/e1/drive-imports': reply(201, job({ status: 'queued', total: 0, imported: 0, skipped: 0 })),
+      }));
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        renderApp('/events/e1');
+        typeInto(await screen.findByLabelText('Google Drive folder link').then(() => 'Google Drive folder link'),
+          'https://drive.google.com/drive/folders/1AbCdEfGhIjKl');
+        press('Import from Drive');
+        const dialog = await screen.findByRole('dialog');
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Start import' }));
+        expect(await screen.findByText('Starting the import…')).toBeTruthy();
+        expect(callsTo(calls, 'POST', '/api/v1/events/e1/drive-imports')[0].body).toEqual({
+          link: 'https://drive.google.com/drive/folders/1AbCdEfGhIjKl', album_id: null,
+        });
+        await vi.advanceTimersByTimeAsync(3100);
+        expect(await screen.findByText(/3 of 8 imported/)).toBeTruthy();
+        expect(screen.getByRole('progressbar', { name: 'Google Drive import' }).getAttribute('aria-valuenow')).toBe('38');
+        await vi.advanceTimersByTimeAsync(3100);
+        expect(await screen.findByText(/7 imported, 2 already here, 1 could not be imported/)).toBeTruthy();
+        expect(screen.getByText('Day/A.NEF')).toBeTruthy();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('explains a link that is not a Drive folder', async () => {
+      mockApi(eventRoutes({
+        'GET /api/v1/events/e1/drive-imports': { enabled: true, imports: [] },
+        'POST /api/v1/events/e1/drive-imports': reply(400, { link: ['Paste a Google Drive folder link.'] }),
+      }));
+      renderApp('/events/e1');
+      await screen.findByLabelText('Google Drive folder link');
+      typeInto('Google Drive folder link', 'https://example.com/x');
+      press('Import from Drive');
+      fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Start import' }));
+      expect((await screen.findByRole('alert')).textContent).toBe('Paste a Google Drive folder link.');
+    });
   });
 
   it('archived events cannot take new photos', async () => {

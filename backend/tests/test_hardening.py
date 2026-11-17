@@ -38,14 +38,13 @@ def test_upload_that_is_not_webp_is_refused_and_deleted(api, studio_a, fake_stor
     photo_id = registered.json()["files"][0]["id"]
     api.json("post", f"/api/v1/uploads/{upload}/urls", {"photo_ids": [photo_id]})
     with tenancy.bypass_rls():
-        incoming = Photo.objects.get(pk=photo_id).incoming_keys()
-    for key in incoming:
-        fake_storage["objects"][key] = 5000
-    fake_storage["objects"][f"{incoming[0]}#head"] = b"<html><script>alert(1)"
+        incoming = Photo.objects.get(pk=photo_id).incoming_key()
+    fake_storage["objects"][incoming] = 5000
+    fake_storage["objects"][f"{incoming}#head"] = b"<html><script>alert(1)"
     entry = {"id": photo_id, "width": 10, "height": 10, "source": "jpeg"}
     result = api.json("post", f"/api/v1/uploads/{upload}/confirm", {"photos": [entry]}).json()
     assert result["results"][0]["failure_reason"] == "Not a WebP image."
-    assert sorted(fake_storage["deleted"]) == sorted(incoming)
+    assert fake_storage["deleted"] == [incoming]
 
 
 class TestConfirmedEmailRequired:
@@ -256,10 +255,10 @@ class TestReviewFindings:
     ):
         upload, registered = start_upload(api, studio_a["event"], ["a.jpg"])
         photo_id = registered.json()["files"][0]["id"]
-        upload_and_confirm(api, fake_storage, upload, [photo_id], size=60_000)
+        upload_and_confirm(api, fake_storage, upload, [photo_id], size=30_000)
         with tenancy.bypass_rls():
             photo = Photo.objects.get(pk=photo_id)
-        assert fake_storage["objects"][photo.preview_key] == 60_000
+        assert fake_storage["objects"][photo.preview_key] == 30_000
         # The browser's links pointed at one-time incoming keys, never at the final ones.
         assert "incoming/" not in photo.preview_key and photo.upload_nonce == ""
         assert (

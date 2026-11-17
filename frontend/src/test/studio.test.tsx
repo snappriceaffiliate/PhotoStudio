@@ -209,6 +209,7 @@ describe('an event', () => {
     'GET /api/v1/events/e1/selection': { count: 0, results: [], duplicate_filenames: [] },
     'GET /api/v1/events/e1/clients': [],
     'GET /api/v1/events/e1/progress': { status: 'shared', selection_limit: 3, selected: 0, submitted_at: null, last_client_login: null },
+    'GET /api/v1/events/e1/drive-imports': { enabled: false, imports: [] },
     ...extra,
   });
 

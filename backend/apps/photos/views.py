@@ -3,14 +3,15 @@
 Flow per upload run (see frontend/src/upload/uploader.ts):
 1. POST /events/{id}/uploads                 -> a new upload session
 2. POST /uploads/{id}/files     (<= 2000)    -> one Photo row per file; READY ones are skipped
-3. POST /uploads/{id}/urls      (<= 50)      -> signed PUT URLs for preview and thumbnail
-4. browser PUTs both images straight to storage
-5. POST /uploads/{id}/confirm   (<= 50)      -> server checks both objects, marks READY or FAILED
+3. POST /uploads/{id}/urls      (<= 50)      -> one signed PUT URL per photo
+4. browser PUTs the image (thumbnail and preview in one) straight to storage
+5. POST /uploads/{id}/confirm   (<= 50)      -> server checks the object, marks READY or FAILED
 6. POST /uploads/{id}/complete               -> closes the session and returns totals
 """
 
 import secrets
 import uuid
+from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
@@ -30,7 +31,8 @@ from apps.core import storage
 from apps.core.validators import safe_relative_path
 from apps.events.models import Album, Event
 
-from .models import Photo, UploadSession
+from . import drive, tasks
+from .models import DriveImport, Photo, UploadSession
 
 FILES_PER_CALL = 2000
 PHOTOS_PER_BATCH = 50
@@ -202,25 +204,19 @@ class UploadUrlsView(StudioView):
             )
         )
         for photo in photos:
-            photo.preview_key, photo.thumb_key = photo.final_keys()
+            photo.preview_key = photo.thumb_key = photo.final_key()
             photo.upload_nonce = secrets.token_hex(8)
         Photo.objects.bulk_update(photos, ["preview_key", "thumb_key", "upload_nonce"])
-        urls = []
-        for p in photos:
-            incoming_preview, incoming_thumb = p.incoming_keys()
-            urls.append(
-                {
-                    "id": str(p.pk),
-                    "preview_url": storage.signed_upload_url(incoming_preview, "image/webp"),
-                    "thumb_url": storage.signed_upload_url(incoming_thumb, "image/webp"),
-                }
-            )
+        urls = [
+            {"id": str(p.pk), "url": storage.signed_upload_url(p.incoming_key(), "image/webp")}
+            for p in photos
+        ]
         return Response({"max_bytes": settings.MAX_IMAGE_BYTES, "urls": urls})
 
 
 class UploadConfirmView(StudioView):
-    """Checks each uploaded image. Anything missing, over 100 KB or not a WebP image is
-    refused and deleted; accepted images are copied to their final place."""
+    """Checks each uploaded image. Anything missing, over the size limit or not a WebP image
+    is refused and deleted; accepted images are copied to their final place."""
 
     def post(self, request, upload_id):
         session = _open_session(request, upload_id)
@@ -235,27 +231,26 @@ class UploadConfirmView(StudioView):
         results = []
         for photo in photos:
             entry = entries[photo.pk]
-            incoming = photo.incoming_keys()
-            sizes = [storage.object_size(k) for k in incoming]
-            if None in sizes:
+            incoming = photo.incoming_key()
+            size = storage.object_size(incoming)
+            if size is None:
                 photo.status, photo.failure_reason = Photo.Status.FAILED, "Upload did not arrive."
-            elif max(sizes) > settings.MAX_IMAGE_BYTES:
-                photo.status, photo.failure_reason = Photo.Status.FAILED, "Image is over 100 KB."
-            elif not all(storage.is_webp(storage.read_prefix(k)) for k in incoming):
+            elif size > settings.MAX_IMAGE_BYTES:
+                photo.status = Photo.Status.FAILED
+                photo.failure_reason = f"Image is over {settings.MAX_IMAGE_BYTES // 1024} KB."
+            elif not storage.is_webp(storage.read_prefix(incoming)):
                 photo.status, photo.failure_reason = Photo.Status.FAILED, "Not a WebP image."
             else:
-                for source, target in zip(incoming, photo.final_keys(), strict=True):
-                    storage.copy_object(source, target)
+                storage.copy_object(incoming, photo.final_key())
                 photo.status, photo.failure_reason = Photo.Status.READY, ""
-                photo.preview_bytes, photo.thumb_bytes = sizes
+                photo.preview_bytes, photo.thumb_bytes = size, None
                 photo.width, photo.height, photo.source = (
                     entry["width"],
                     entry["height"],
                     entry["source"],
                 )
-            for key in incoming:
-                if storage.object_size(key) is not None:
-                    storage.delete_object(key)
+            if size is not None:
+                storage.delete_object(incoming)
             photo.upload_nonce = ""  # the next attempt gets fresh upload URLs
             photo.save()
             results.append({**_status_entry(photo), "failure_reason": photo.failure_reason})
@@ -359,10 +354,96 @@ class PhotoDeleteView(StudioView):
                 },
                 status=status.HTTP_409_CONFLICT,
             )
-        keys = [key for p in photos for key in (p.preview_key, p.thumb_key) if key]
+        keys = [key for p in photos for key in p.stored_keys()]
         count = photos.count()
         with transaction.atomic():
             photos.delete()  # their selections go with them
             record(request, "photos.deleted", event, f"{count} photos, {chosen} chosen")
             transaction.on_commit(lambda: storage.delete_keys(keys))
         return Response({"deleted": count, "removed_from_selection": chosen})
+
+
+STALE_IMPORT = timedelta(minutes=30)
+
+
+class DriveImportRequest(serializers.Serializer):
+    link = serializers.CharField(max_length=2000)
+    album_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+def _drive_import(job: DriveImport) -> dict:
+    return {
+        "id": str(job.pk),
+        "folder_name": job.folder_name,
+        "status": job.status,
+        "total": job.total,
+        "imported": job.imported,
+        "skipped": job.skipped,
+        "failed": job.failed,
+        "failures": job.failures,
+        "error": job.error,
+        "created_at": job.created_at,
+        "finished_at": job.finished_at,
+    }
+
+
+class DriveImportView(StudioView):
+    """Import photos from a Google Drive folder shared as "Anyone with the link"."""
+
+    def get(self, request, event_id):
+        event = _event(request, event_id)
+        jobs = DriveImport.objects.for_studio(request.studio_id).filter(event=event)[:5]
+        return Response(
+            {"enabled": bool(settings.GOOGLE_API_KEY), "imports": [_drive_import(j) for j in jobs]}
+        )
+
+    def post(self, request, event_id):
+        event = _event(request, event_id)
+        if not settings.GOOGLE_API_KEY:
+            return Response(
+                {"detail": "Importing from Google Drive is not set up yet."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        entitlements.require_can_work(request.studio_id)
+        if event.status == Event.Status.ARCHIVED:
+            return Response(
+                {"detail": "This event is archived."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        data = DriveImportRequest(data=request.data)
+        data.is_valid(raise_exception=True)
+        try:
+            folder_id = drive.folder_id_from_link(data.validated_data["link"])
+        except drive.DriveError as error:
+            return Response({"link": [str(error)]}, status=status.HTTP_400_BAD_REQUEST)
+        album_id = data.validated_data.get("album_id")
+        if (
+            album_id
+            and not Album.objects.for_studio(request.studio_id)
+            .filter(event=event, pk=album_id)
+            .exists()
+        ):
+            return Response(
+                {"detail": "An album does not belong to this event."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        busy = (
+            DriveImport.objects.for_studio(request.studio_id)
+            .filter(event=event, status__in=[DriveImport.Status.QUEUED, DriveImport.Status.RUNNING])
+            .filter(updated_at__gte=timezone.now() - STALE_IMPORT)
+        )
+        if busy.exists():
+            return Response(
+                {"detail": "An import is already running for this event. Wait for it to finish."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        with transaction.atomic():
+            job = DriveImport.objects.create(
+                studio_id=request.studio_id,
+                event=event,
+                album_id=album_id,
+                folder_id=folder_id,
+                created_by=request.user,
+            )
+            record(request, "photos.drive_import", event, f"Google Drive folder {folder_id}")
+            transaction.on_commit(lambda: tasks.import_drive_folder.defer(import_id=str(job.pk)))
+        return Response(_drive_import(job), status=status.HTTP_201_CREATED)

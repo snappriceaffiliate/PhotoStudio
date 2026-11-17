@@ -1,8 +1,10 @@
 # PickSnap
 
 Studios share a shoot online; clients pick the photos to print; the studio gets the list of
-selected files. Photos are compressed in the browser so every stored preview and thumbnail is
-at most 100 KB. RAW originals never leave the studio's computer.
+selected files. Photos are compressed in the browser into one small WebP per photo (at most
+40 KB, used as both thumbnail and preview). RAW originals never leave the studio's computer.
+Studios can also import from a Google Drive folder shared as "Anyone with the link"
+(set `GOOGLE_API_KEY`); the server then makes the same small images.
 
 Stack: React (Vite) + Django 5.2 + Django REST Framework + PostgreSQL, Procrastinate for
 background jobs, Cloudflare R2 for storage. One monolith: Django serves the built React app.
@@ -95,7 +97,7 @@ backend/            Django project
   apps/studios/     Studio (the tenant)
   apps/accounts/    users (email login, Owner and Staff roles), auth and staff API
   apps/events/      events and albums (row-level security on)
-  apps/photos/      upload manifest, signed upload URLs, 100 KB check, photo list, clean-up job
+  apps/photos/      upload manifest, signed upload URLs, 40 KB check, Drive import, photo list, clean-up jobs
   apps/clients/     client logins, gallery API, selections (limit enforced), submission,
                     selection review, exports (CSV, list, Lightroom, copy scripts), archive
   apps/billing/     plans, subscriptions, trial and plan limits, Razorpay checkout and webhooks
@@ -107,7 +109,7 @@ frontend/           React app (TypeScript, Vite, React Router)
   src/gallery/      client gallery: login, grid, swipe viewer, select, notes, submit
   src/upload/       folder uploader: compress, upload, confirm in batches; pause and resume
   src/auth/         logged-in user state
-  src/compression/  RAW preview extraction, WebP compression to 100 KB, worker pool
+  src/compression/  RAW preview extraction, WebP compression to 40 KB, worker pool
   src/api/          API client (session cookie and CSRF)
 docker/             Dockerfile (dev and production targets), local DB role, SeaweedFS, R2 CORS template
 docs/               deployment guide, security notes, operations runbook
@@ -120,12 +122,12 @@ loadtest/           Locust load test
 The spike page (http://localhost:5173/dev/spikes) is used to settle the Sprint 0 exit criteria.
 
 1. **Compression.** Choose a folder of real RAW and JPEG files from the studios' cameras. The page
-   extracts each RAW file's embedded JPEG preview, compresses a preview (about 1600 px) and a
-   thumbnail (about 400 px) to WebP under 100 KB, and reports success by file type, sizes, quality
+   extracts each RAW file's embedded JPEG preview, compresses one image (up to 1200 px) to WebP
+   under 40 KB, and reports success by file type, sizes, quality
    and time per photo. Click a row to judge quality full screen. **Download CSV report** saves the
    results to share with the team.
 2. **Storage.** Uploads five previews straight to storage with signed URLs, has the server check
-   each size (anything over 100 KB is refused or deleted), and shows them through 15-minute signed
+   each size (anything over 40 KB is refused or deleted), and shows them through 15-minute signed
    delivery URLs.
 
 Still to do in Sprint 0: run the compression page on real camera files from at least three brands,

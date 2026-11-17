@@ -10,6 +10,11 @@ urlpatterns = [
         views.PhotoDeleteView.as_view(),
         name="photo-delete",
     ),
+    path(
+        "events/<uuid:event_id>/drive-imports",
+        views.DriveImportView.as_view(),
+        name="drive-imports",
+    ),
     path("uploads/<uuid:upload_id>/files", views.UploadFilesView.as_view(), name="upload-files"),
     path("uploads/<uuid:upload_id>/urls", views.UploadUrlsView.as_view(), name="upload-urls"),
     path(

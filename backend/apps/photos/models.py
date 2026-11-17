@@ -25,7 +25,9 @@ class UploadSession(TenantModel):
 
 
 class Photo(TenantModel):
-    """One photo of an event: a preview and a thumbnail in storage, both at most 100 KB.
+    """One photo of an event: one small WebP image in storage (at most MAX_IMAGE_BYTES), used
+    both as the thumbnail and as the preview. Older photos may still have two images, so
+    `preview_key` and `thumb_key` stay; for new photos they hold the same key.
 
     The original never leaves the studio's computer. `relative_path` (folder plus filename,
     as chosen in the uploader) is what maps a client's selection back to that original;
@@ -41,6 +43,7 @@ class Photo(TenantModel):
     class Source(models.TextChoices):
         RAW = "raw", "RAW embedded preview"
         JPEG = "jpeg", "JPEG"
+        DRIVE = "drive", "Google Drive"
 
     event = models.ForeignKey("events.Event", on_delete=models.CASCADE, related_name="photos")
     album = models.ForeignKey(
@@ -83,13 +86,51 @@ class Photo(TenantModel):
     def storage_prefix(self) -> str:
         return f"studios/{self.studio_id}/events/{self.event_id}/photos/{self.pk}"
 
-    def final_keys(self) -> tuple[str, str]:
-        prefix = self.storage_prefix()
-        return f"{prefix}/preview.webp", f"{prefix}/thumb.webp"
+    def final_key(self) -> str:
+        return f"{self.storage_prefix()}/image.webp"
 
-    def incoming_keys(self) -> tuple[str, str]:
-        """Where the browser uploads. Checked images are copied to the final keys, which no
+    def incoming_key(self) -> str:
+        """Where the browser uploads. The checked image is copied to the final key, which no
         signed upload URL can write to, so a link reused after confirming changes nothing.
         Leftovers under incoming/ are removed by a storage lifecycle rule."""
-        base = f"incoming/{self.storage_prefix()}/{self.upload_nonce}"
-        return f"{base}/preview.webp", f"{base}/thumb.webp"
+        return f"incoming/{self.storage_prefix()}/{self.upload_nonce}/image.webp"
+
+    def stored_keys(self) -> list[str]:
+        """Every stored image of this photo, each once (old photos have two, new ones one)."""
+        return list(dict.fromkeys(k for k in (self.preview_key, self.thumb_key) if k))
+
+
+class DriveImport(TenantModel):
+    """One import of a shared Google Drive folder into an event, run by a background job.
+
+    Importing the same folder again only adds photos that are not in the event yet.
+    """
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Waiting to start"
+        RUNNING = "running", "Importing"
+        DONE = "done", "Finished"
+        FAILED = "failed", "Stopped"
+
+    event = models.ForeignKey(
+        "events.Event", on_delete=models.CASCADE, related_name="drive_imports"
+    )
+    album = models.ForeignKey(
+        "events.Album", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    folder_id = models.CharField(max_length=200)
+    folder_name = models.CharField(max_length=255, blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.QUEUED)
+    total = models.PositiveIntegerField(default=0)
+    imported = models.PositiveIntegerField(default=0)
+    skipped = models.PositiveIntegerField(default=0, help_text="Already in the event.")
+    failed = models.PositiveIntegerField(default=0)
+    failures = models.JSONField(default=list, blank=True)
+    error = models.CharField(max_length=500, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]

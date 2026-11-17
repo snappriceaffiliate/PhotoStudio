@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { api } from '../api/client';
+import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { Field, FormMessage, useSubmit } from '../components/Form';
 import { duplicateNames, EventUploader, toUploadFiles, type Progress, type UploadFile } from '../upload/uploader';
@@ -234,7 +234,7 @@ function UploadPanel({ event, albums, onEventChange, onProgress, onFinished }: {
   onFinished: () => void;
 }) {
   const { user } = useAuth();
-  const [asking, setAsking] = useState(false);
+  const [asking, setAsking] = useState<'files' | 'drive' | null>(null);
   const [watermarkOn, setWatermarkOn] = useState(false);
   const [watermarkText, setWatermarkText] = useState('');
   const [watermarkError, setWatermarkError] = useState('');
@@ -263,12 +263,12 @@ function UploadPanel({ event, albums, onEventChange, onProgress, onFinished }: {
     setProgress(null);
   }
 
-  /** Before every upload, ask whether to watermark the previews (default: the event's setting). */
-  function askWatermark() {
+  /** Before every upload or import, ask whether to watermark the previews (default: the event's setting). */
+  function askWatermark(mode: 'files' | 'drive') {
     setWatermarkOn(event.watermark_enabled);
     setWatermarkText(event.watermark_text || user?.studio?.name || '');
     setWatermarkError('');
-    setAsking(true);
+    setAsking(mode);
   }
 
   async function confirmAndStart() {
@@ -283,9 +283,13 @@ function UploadPanel({ event, albums, onEventChange, onProgress, onFinished }: {
         return;
       }
     }
-    setAsking(false);
-    void start(watermarkOn ? text : undefined);
+    const mode = asking;
+    setAsking(null);
+    if (mode === 'drive') void drive.start();
+    else void start(watermarkOn ? text : undefined);
   }
+
+  const drive = useDriveImport(event.id, albumId, onProgress, onFinished);
 
   async function start(watermark: string | undefined) {
     const run = new EventUploader((p) => {
@@ -354,8 +358,13 @@ function UploadPanel({ event, albums, onEventChange, onProgress, onFinished }: {
               </select>
             </div>
           )}
-          <button onClick={askWatermark}>Start upload</button>
+          <button onClick={() => askWatermark('files')}>Start upload</button>
         </div>
+      )}
+
+      {drive.enabled && !active && (
+        <DriveImportBox drive={drive} albums={albums} albumId={albumId} onAlbum={setAlbumId}
+          onImport={() => askWatermark('drive')} />
       )}
 
       {asking && (
@@ -380,9 +389,9 @@ function UploadPanel({ event, albums, onEventChange, onProgress, onFinished }: {
             {watermarkError && <p className="form-error" role="alert">{watermarkError}</p>}
             <div className="actions">
               <button type="button" onClick={confirmAndStart} disabled={watermarkOn && !watermarkText.trim()}>
-                Start upload
+                {asking === 'drive' ? 'Start import' : 'Start upload'}
               </button>
-              <button type="button" className="secondary" onClick={() => setAsking(false)}>Cancel</button>
+              <button type="button" className="secondary" onClick={() => setAsking(null)}>Cancel</button>
             </div>
           </div>
         </div>
@@ -423,6 +432,157 @@ function UploadPanel({ event, albums, onEventChange, onProgress, onFinished }: {
         </div>
       )}
     </section>
+  );
+}
+
+interface DriveImport {
+  id: string;
+  folder_name: string;
+  status: 'queued' | 'running' | 'done' | 'failed';
+  total: number;
+  imported: number;
+  skipped: number;
+  failed: number;
+  failures: { path: string; reason: string }[];
+  error: string;
+}
+
+type DriveState = ReturnType<typeof useDriveImport>;
+
+const DRIVE_POLL_MS = 3000;
+
+/** Imports from a shared Google Drive folder run on the server; this follows the latest one. */
+function useDriveImport(eventId: string, albumId: string, onProgress: () => void, onFinished: () => void) {
+  const [enabled, setEnabled] = useState(false);
+  const [job, setJob] = useState<DriveImport | null>(null);
+  const [link, setLink] = useState('');
+  const [error, setError] = useState('');
+  const running = job?.status === 'queued' || job?.status === 'running';
+  // The page passes new callbacks on every render; keep the latest without restarting the poll.
+  const callbacks = useRef({ onProgress, onFinished });
+  useEffect(() => {
+    callbacks.current = { onProgress, onFinished };
+  });
+
+  useEffect(() => {
+    api<{ enabled: boolean; imports: DriveImport[] }>(`/events/${eventId}/drive-imports`)
+      .then((d) => {
+        setEnabled(d.enabled);
+        setJob(d.imports[0] ?? null);
+      })
+      .catch(() => undefined);
+  }, [eventId]);
+
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const d = await api<{ imports: DriveImport[] }>(`/events/${eventId}/drive-imports`);
+        const latest = d.imports[0] ?? null;
+        setJob(latest);
+        if (latest && (latest.status === 'done' || latest.status === 'failed')) callbacks.current.onFinished();
+        else callbacks.current.onProgress();
+      } catch {
+        // Keep the last known state; the next poll tries again.
+      }
+    }, DRIVE_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [eventId, running]);
+
+  async function start() {
+    setError('');
+    try {
+      const created = await api<DriveImport>(`/events/${eventId}/drive-imports`, {
+        method: 'POST',
+        body: { link: link.trim(), album_id: albumId || null },
+      });
+      setJob(created);
+      setLink('');
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.fields.link?.[0] ?? err.message);
+      } else {
+        setError('Could not start the import.');
+      }
+    }
+  }
+
+  return { enabled, job, running, link, setLink, error, start };
+}
+
+function DriveImportBox({ drive, albums, albumId, onAlbum, onImport }: {
+  drive: DriveState;
+  albums: Album[];
+  albumId: string;
+  onAlbum: (id: string) => void;
+  onImport: () => void;
+}) {
+  const job = drive.job;
+  const toDo = job ? Math.max(0, job.total - job.skipped) : 0;
+  const handled = job ? job.imported + job.failed : 0;
+  const percent = job?.status === 'done' ? 100 : toDo > 0 ? Math.min(100, Math.round((handled / toDo) * 100)) : 0;
+  return (
+    <div className="drive-import">
+      <h3>Or import from Google Drive</h3>
+      {!drive.running && (
+        <>
+          <p className="muted">
+            In Google Drive, share the event folder as “Anyone with the link”, then paste the link here. PickSnap
+            copies small previews; your originals stay in Drive. Importing the same folder again adds only new photos.
+          </p>
+          <div className="drive-row">
+            <div className="field">
+              <label htmlFor="drive-link">Google Drive folder link</label>
+              <input id="drive-link" type="url" inputMode="url" placeholder="https://drive.google.com/drive/folders/…"
+                value={drive.link} onChange={(e) => drive.setLink(e.target.value)}
+                aria-invalid={drive.error ? true : undefined} />
+            </div>
+            {albums.length > 0 && (
+              <div className="field">
+                <label htmlFor="drive-album">Add to album</label>
+                <select id="drive-album" value={albumId} onChange={(e) => onAlbum(e.target.value)}>
+                  <option value="">No album</option>
+                  {albums.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+            )}
+            <button type="button" className="secondary" onClick={onImport} disabled={!drive.link.trim()}>
+              Import from Drive
+            </button>
+          </div>
+          {drive.error && <p className="form-error" role="alert">{drive.error}</p>}
+        </>
+      )}
+      {job && (
+        <div className="upload-progress" aria-live="polite">
+          {drive.running && (
+            <div className="bar" role="progressbar" aria-label="Google Drive import" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+              <span style={{ width: `${percent}%` }} />
+            </div>
+          )}
+          <p>
+            {job.status === 'queued' && 'Starting the import…'}
+            {job.status === 'running' && (job.total
+              ? `Importing ${job.folder_name ? `“${job.folder_name}”` : 'the folder'}: ${job.imported} of ${toDo} imported. You can leave this page; the import continues.`
+              : 'Reading the folder from Google Drive…')}
+            {job.status === 'done' &&
+              `Last import${job.folder_name ? ` from “${job.folder_name}”` : ''}: ${job.imported} imported` +
+              (job.skipped ? `, ${job.skipped} already here` : '') +
+              (job.failed ? `, ${job.failed} could not be imported` : '') + '.'}
+            {job.status === 'failed' && <span className="error">Import stopped: {job.error}</span>}
+          </p>
+          {job.failures.length > 0 && !drive.running && (
+            <details className="failures">
+              <summary>{job.failed} photo{job.failed === 1 ? '' : 's'} could not be imported</summary>
+              <ul>
+                {job.failures.map((f) => <li key={f.path}><code>{f.path}</code>: {f.reason}</li>)}
+              </ul>
+              <p className="muted">RAW files often have no preview in Google Drive. Upload those from your computer instead.</p>
+            </details>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
