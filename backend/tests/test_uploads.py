@@ -43,15 +43,13 @@ def start_upload(api, event, paths, album=None):
     return upload, registered
 
 
-def upload_and_confirm(api, fake_storage, upload, photo_ids, size=60_000):
+def upload_and_confirm(api, fake_storage, upload, photo_ids, size=30_000):
     urls = api.json("post", f"/api/v1/uploads/{upload}/urls", {"photo_ids": photo_ids}).json()[
         "urls"
     ]
     with tenancy.bypass_rls():
         for photo in Photo.objects.filter(pk__in=photo_ids):
-            preview, thumb = photo.incoming_keys()
-            fake_storage["objects"][preview] = size
-            fake_storage["objects"][thumb] = 20_000
+            fake_storage["objects"][photo.incoming_key()] = size
     entries = [{"id": i, "width": 1600, "height": 1067, "source": "raw"} for i in photo_ids]
     return urls, api.json("post", f"/api/v1/uploads/{upload}/confirm", {"photos": entries})
 
@@ -90,7 +88,8 @@ class TestUploadFlow:
         assert [f["status"] for f in files] == ["pending", "pending"]
 
         urls, confirmed = upload_and_confirm(api, fake_storage, upload, [f["id"] for f in files])
-        assert all("X-Amz-Signature=" in u["preview_url"] for u in urls)
+        assert all("X-Amz-Signature=" in u["url"] for u in urls)
+        assert all(set(u) == {"id", "url"} for u in urls)  # one image per photo
         assert {r["status"] for r in confirmed.json()["results"]} == {"ready"}
 
         totals = api.json("post", f"/api/v1/uploads/{upload}/complete").json()["totals"]
@@ -107,18 +106,32 @@ class TestUploadFlow:
             photo = Photo.objects.get(pk=photo_id)
         assert (
             photo.preview_key
-            == f"studios/{studio_a['studio'].pk}/events/{event.pk}/photos/{photo_id}/preview.webp"
+            == photo.thumb_key
+            == f"studios/{studio_a['studio'].pk}/events/{event.pk}/photos/{photo_id}/image.webp"
         )
 
-    def test_over_100_kb_is_refused_and_deleted(self, api, studio_a, fake_storage):
+    def test_over_40_kb_is_refused_and_deleted(self, api, studio_a, fake_storage):
         upload, registered = start_upload(api, studio_a["event"], ["big.jpg"])
         photo_id = registered.json()["files"][0]["id"]
-        _, confirmed = upload_and_confirm(
-            api, fake_storage, upload, [photo_id], size=100 * 1024 + 1
-        )
+        _, confirmed = upload_and_confirm(api, fake_storage, upload, [photo_id], size=40 * 1024 + 1)
         result = confirmed.json()["results"][0]
-        assert (result["status"], result["failure_reason"]) == ("failed", "Image is over 100 KB.")
-        assert len(fake_storage["deleted"]) == 2
+        assert (result["status"], result["failure_reason"]) == ("failed", "Image is over 40 KB.")
+        assert len(fake_storage["deleted"]) == 1
+
+    def test_one_image_is_stored_and_used_for_thumbnail_and_preview(
+        self, api, studio_a, fake_storage
+    ):
+        event = studio_a["event"]
+        upload, registered = start_upload(api, event, ["a.jpg"])
+        photo_id = registered.json()["files"][0]["id"]
+        upload_and_confirm(api, fake_storage, upload, [photo_id], size=38_000)
+        with tenancy.bypass_rls():
+            photo = Photo.objects.get(pk=photo_id)
+        assert (photo.preview_bytes, photo.thumb_bytes) == (38_000, None)
+        stored = [k for k in fake_storage["objects"] if k.startswith("studios/")]
+        assert stored == [photo.final_key()]
+        listed = api.json("get", f"/api/v1/events/{event.pk}/photos").json()["results"][0]
+        assert listed["thumb_url"].split("?")[0] == listed["preview_url"].split("?")[0]
 
     def test_missing_upload_is_marked_failed(self, api, studio_a, fake_storage):
         upload, registered = start_upload(api, studio_a["event"], ["lost.jpg"])

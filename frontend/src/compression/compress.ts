@@ -1,14 +1,14 @@
 import { largestEmbeddedJpeg } from './extractJpeg';
 import { fitUnderLimit } from './fitSize';
 
-export const MAX_IMAGE_BYTES = 100 * 1024;
-export const PREVIEW_LONG_EDGE = 1600;
-export const THUMB_LONG_EDGE = 400;
-const MIN_PREVIEW_LONG_EDGE = 800;
-const MIN_THUMB_LONG_EDGE = 200;
-// Below these WebP qualities fine detail starts to smear; shrink the image a little instead.
-const PREVIEW_QUALITY_FLOOR = 0.55;
-const THUMB_QUALITY_FLOOR = 0.45;
+/** One image per photo, used as both thumbnail and preview. Small files matter more than
+ * clarity: the client only needs to recognise and choose the photo. */
+export const MAX_IMAGE_BYTES = 40 * 1024;
+export const IMAGE_LONG_EDGE = 1200;
+const MIN_IMAGE_LONG_EDGE = 480;
+// Below this WebP quality detail smears badly; shrink the image a little instead.
+const IMAGE_QUALITY_FLOOR = 0.35;
+const IMAGE_MAX_QUALITY = 0.75;
 
 export const RAW_EXTENSIONS = ['cr2', 'cr3', 'nef', 'nrw', 'arw', 'srf', 'sr2', 'raf', 'orf', 'rw2', 'dng', 'pef', 'srw'];
 export const JPEG_EXTENSIONS = ['jpg', 'jpeg'];
@@ -31,8 +31,8 @@ export interface CompressResult {
   source: 'embedded-jpeg' | 'direct';
   sourceWidth: number;
   sourceHeight: number;
+  /** The one stored image (thumbnail and preview in one). */
   preview: EncodedImage;
-  thumb: EncodedImage;
   ms: number;
 }
 
@@ -87,6 +87,7 @@ async function encodeUnder(
   minLongEdge: number,
   maxBytes: number,
   qualityFloor: number,
+  maxQuality: number,
   watermark?: string,
 ): Promise<EncodedImage> {
   const canvases = new Map<number, OffscreenCanvas>();
@@ -101,7 +102,7 @@ async function encodeUnder(
       if (blob.type !== 'image/webp') throw new Error('This browser cannot encode WebP');
       return { size: blob.size, result: { blob, width: canvas.width, height: canvas.height } };
     },
-    { maxBytes, longEdge, minLongEdge, qualityFloor },
+    { maxBytes, longEdge, minLongEdge, qualityFloor, maxQuality, lastResortQualities: [0.3, 0.25, 0.2] },
   );
   return { ...fit.result, quality: fit.quality };
 }
@@ -111,8 +112,9 @@ export async function compressFile(file: File, path: string, options: CompressOp
   const ext = extensionOf(file.name);
   const { bitmap, source } = await decode(file, ext);
   try {
-    const preview = await encodeUnder(bitmap, PREVIEW_LONG_EDGE, MIN_PREVIEW_LONG_EDGE, MAX_IMAGE_BYTES, PREVIEW_QUALITY_FLOOR, options.watermark);
-    const thumb = await encodeUnder(bitmap, THUMB_LONG_EDGE, MIN_THUMB_LONG_EDGE, MAX_IMAGE_BYTES, THUMB_QUALITY_FLOOR);
+    const preview = await encodeUnder(
+      bitmap, IMAGE_LONG_EDGE, MIN_IMAGE_LONG_EDGE, MAX_IMAGE_BYTES, IMAGE_QUALITY_FLOOR, IMAGE_MAX_QUALITY, options.watermark,
+    );
     return {
       name: file.name,
       path,
@@ -121,7 +123,6 @@ export async function compressFile(file: File, path: string, options: CompressOp
       sourceWidth: bitmap.width,
       sourceHeight: bitmap.height,
       preview,
-      thumb,
       ms: Math.round(performance.now() - started),
     };
   } finally {

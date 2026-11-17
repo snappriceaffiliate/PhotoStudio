@@ -455,3 +455,11 @@ figure img, .placeholder { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; 
 .tile-badge { position: absolute; top: 8px; right: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
   background: var(--marigold); color: var(--on-marigold, #1c1a17); }
 .tile-name { margin: 4px 0 0; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Importing from a shared Google Drive folder, under the upload buttons. */
+.drive-import { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.drive-import h3 { margin: 0 0 6px; font-size: 16px; }
+.drive-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.drive-row .field { margin-bottom: 0; flex: 1 1 260px; }
+.drive-row .field:has(select) { flex: 0 1 200px; }
+.drive-row button { min-height: 44px; }

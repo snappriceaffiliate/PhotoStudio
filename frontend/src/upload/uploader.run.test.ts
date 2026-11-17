@@ -28,7 +28,6 @@ const compressed = (file: File, path: string, source = 'jpeg') => ({
   ok: true as const, file, path,
   result: {
     source, preview: { blob: new Blob(['preview']), width: 1600, height: 1067 },
-    thumb: { blob: new Blob(['thumb']), width: 400, height: 267 },
   },
 });
 
@@ -72,7 +71,7 @@ beforeEach(() => {
     }
     if (url === '/api/v1/uploads/u1/urls') {
       return json({
-        urls: body.photo_ids.map((id: string) => ({ id, preview_url: `https://r2.test/${id}/preview`, thumb_url: `https://r2.test/${id}/thumb` })),
+        urls: body.photo_ids.map((id: string) => ({ id, url: `https://r2.test/${id}/image` })),
       });
     }
     if (url === '/api/v1/uploads/u1/confirm') {
@@ -109,10 +108,10 @@ const puts = () => calls.filter((c) => c.method === 'PUT');
 const posts = (suffix: string) => calls.filter((c) => c.method === 'POST' && c.url.endsWith(suffix));
 
 describe('a successful upload', () => {
-  it('registers, sends previews and thumbnails, confirms and finishes', async () => {
+  it('registers, sends one image per photo, confirms and finishes', async () => {
     const { last } = await run(files(3));
     expect(last).toMatchObject({ phase: 'done', total: 3, done: 3, alreadyUploaded: 0, failures: [] });
-    expect(puts()).toHaveLength(6); // a preview and a thumbnail for each photo
+    expect(puts()).toHaveLength(3); // one image (thumbnail and preview in one) for each photo
     expect(puts().every((c) => (c.body as Blob).size > 0)).toBe(true);
     expect(posts('/complete')).toHaveLength(1);
     expect(pool.terminated).toBe(1);
@@ -173,7 +172,7 @@ describe('resuming', () => {
     alreadyReady = new Set(['Day/IMG_000.jpg']);
     const { last } = await run(files(3));
     expect(last).toMatchObject({ phase: 'done', alreadyUploaded: 1, done: 2 });
-    expect(puts()).toHaveLength(4);
+    expect(puts()).toHaveLength(2);
     expect(posts('/urls')[0].body.photo_ids).toEqual(['id:Day/IMG_001.jpg', 'id:Day/IMG_002.jpg']);
   });
 

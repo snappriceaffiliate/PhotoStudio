@@ -16,6 +16,7 @@ dependencies = [
     "sentry-sdk[django]>=2.18",
     "django-otp>=1.5",
     "qrcode>=8.0",
+    "pillow>=11",
 ]
 
 [dependency-groups]

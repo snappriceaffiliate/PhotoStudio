@@ -210,8 +210,12 @@ S3_ACCESS_KEY = os.environ.get("S3_ACCESS_KEY", "devkey")
 S3_SECRET_KEY = os.environ.get("S3_SECRET_KEY", "devsecret")
 S3_REGION = os.environ.get("S3_REGION", "auto")
 
-# Every stored preview and thumbnail must be at most 100 KB.
-MAX_IMAGE_BYTES = 100 * 1024
+# Every stored image must fit under this limit.
+# One small WebP per photo, used as thumbnail and preview. Clarity matters less than size.
+MAX_IMAGE_BYTES = 40 * 1024
+
+# Importing from shared Google Drive folders. Empty: the import option is hidden.
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 SIGNED_URL_SECONDS = 15 * 60
 # Upper bound on photos in one event, until plan limits arrive with billing (Sprint 4).
 MAX_PHOTOS_PER_EVENT = int(os.environ.get("MAX_PHOTOS_PER_EVENT", "15000"))

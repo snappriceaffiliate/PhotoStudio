@@ -29,7 +29,6 @@ function summarize(rows: Row[]) {
     byExt.set(r.extension, e);
   }
   const sizes = done.map((r) => r.result!.preview.blob.size);
-  const thumbs = done.map((r) => r.result!.thumb.blob.size);
   const times = done.map((r) => r.result!.ms);
   const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
   return {
@@ -39,13 +38,12 @@ function summarize(rows: Row[]) {
     queued: rows.filter((r) => r.status === 'queued').length,
     avgPreview: avg(sizes),
     maxPreview: sizes.length ? Math.max(...sizes) : 0,
-    avgThumb: avg(thumbs),
     avgMs: avg(times),
   };
 }
 
 function toCsv(rows: Row[]): string {
-  const head = ['path', 'extension', 'status', 'source', 'source_px', 'preview_px', 'preview_kb', 'preview_quality', 'thumb_kb', 'ms', 'error'];
+  const head = ['path', 'extension', 'status', 'source', 'source_px', 'preview_px', 'preview_kb', 'preview_quality', 'ms', 'error'];
   const lines = rows.map((r) => {
     const x = r.result;
     return [
@@ -57,7 +55,6 @@ function toCsv(rows: Row[]): string {
       x ? `${x.preview.width}x${x.preview.height}` : '',
       x ? kb(x.preview.blob.size) : '',
       x ? x.preview.quality : '',
-      x ? kb(x.thumb.blob.size) : '',
       x?.ms ?? r.ms ?? '',
       r.error ?? '',
     ]
@@ -132,7 +129,7 @@ export default function SpikePage() {
   async function checkLimit() {
     try {
       await requestUploadUrl('too-big.webp', 'image/webp', MAX_IMAGE_BYTES + 1);
-      setLimitCheck('Not refused: the server accepted an image over 100 KB.');
+      setLimitCheck('Not refused: the server accepted an image over the size limit.');
     } catch (error) {
       setLimitCheck(`Refused as expected (${String(error).slice(0, 120)})`);
     }
@@ -155,7 +152,7 @@ export default function SpikePage() {
         <h1>Sprint 0 spikes</h1>
         <p>
           Checks the two riskiest parts of the upload: getting a preview out of RAW files in the browser, and fitting every
-          preview and thumbnail into 100 KB. Files never leave this computer unless you use the storage test.
+          each photo into one image of at most 40 KB. Files never leave this computer unless you use the storage test.
         </p>
       </header>
 
@@ -186,7 +183,6 @@ export default function SpikePage() {
               <div><dt>Failed</dt><dd className={summary.failed ? 'bad' : ''}>{summary.failed}</dd></div>
               <div><dt>Avg preview</dt><dd>{kb(summary.avgPreview)} KB</dd></div>
               <div><dt>Largest preview</dt><dd className={summary.maxPreview > MAX_IMAGE_BYTES ? 'bad' : ''}>{kb(summary.maxPreview)} KB</dd></div>
-              <div><dt>Avg thumbnail</dt><dd>{kb(summary.avgThumb)} KB</dd></div>
               <div><dt>Avg time per photo</dt><dd>{Math.round(summary.avgMs)} ms</dd></div>
             </dl>
             <p className="hint">
@@ -202,7 +198,7 @@ export default function SpikePage() {
                 <thead>
                   <tr>
                     <th></th><th>File</th><th>Source</th><th>Original px</th><th>Preview px</th>
-                    <th>Preview KB</th><th>Quality</th><th>Thumb KB</th><th>ms</th>
+                    <th>Preview KB</th><th>Quality</th><th>ms</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -215,7 +211,6 @@ export default function SpikePage() {
                       <td>{r.result && `${r.result.preview.width} × ${r.result.preview.height}`}</td>
                       <td>{r.result && kb(r.result.preview.blob.size)}</td>
                       <td>{r.result?.preview.quality}</td>
-                      <td>{r.result && kb(r.result.thumb.blob.size)}</td>
                       <td>{r.result?.ms ?? r.ms}</td>
                     </tr>
                   ))}
@@ -234,7 +229,7 @@ export default function SpikePage() {
         </p>
         <div className="controls">
           <button onClick={uploadSample} disabled={running || summary.done === 0}>Upload 5 previews</button>
-          <button className="secondary" onClick={checkLimit}>Check 100 KB refusal</button>
+          <button className="secondary" onClick={checkLimit}>Check size limit refusal</button>
           {limitCheck && <span className="hint">{limitCheck}</span>}
         </div>
         {stored.length > 0 && (

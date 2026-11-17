@@ -1,8 +1,8 @@
 /**
  * Uploads a folder of photos to one event.
  *
- * Each photo is compressed in a web worker into a WebP preview and thumbnail (each at most
- * 100 KB), sent straight to storage with signed URLs, then confirmed by the server.
+ * Each photo is compressed in a web worker into one small WebP image (at most 40 KB, used as
+ * both thumbnail and preview), sent straight to storage with a signed URL, then confirmed.
  * Work runs in batches: the next batch compresses while the current one uploads.
  * The run is resumable: choosing the same folder again skips photos already stored.
  */
@@ -32,7 +32,7 @@ export interface Progress {
   alreadyUploaded: number;
   /** Photos compressed so far (or that failed to compress): moves with every photo. */
   prepared: number;
-  /** Photos whose preview and thumbnail have both reached storage: moves with every photo. */
+  /** Photos whose image has reached storage: moves with every photo. */
   sent: number;
   /** Photos the server has checked and accepted. */
   done: number;
@@ -198,7 +198,7 @@ export class EventUploader {
     if (!items.length) return;
     const byId = new Map(items.map((i) => [registered.get(i.path)!.id, i]));
     const { urls } = await withRetry(() =>
-      api<{ urls: { id: string; preview_url: string; thumb_url: string }[] }>(`/uploads/${uploadId}/urls`, {
+      api<{ urls: { id: string; url: string }[] }>(`/uploads/${uploadId}/urls`, {
         method: 'POST',
         body: { photo_ids: [...byId.keys()] },
       }),
@@ -208,13 +208,9 @@ export class EventUploader {
     await runLimited(urls, PUT_CONCURRENCY, async (u) => {
       const item = byId.get(u.id)!;
       try {
-        await putObject(u.preview_url, item.result.preview.blob);
-        await putObject(u.thumb_url, item.result.thumb.blob);
+        await putObject(u.url, item.result.preview.blob);
         sent.push(u.id);
-        this.emit({
-          sent: this.progress.sent + 1,
-          bytesSent: this.progress.bytesSent + item.result.preview.blob.size + item.result.thumb.blob.size,
-        });
+        this.emit({ sent: this.progress.sent + 1, bytesSent: this.progress.bytesSent + item.result.preview.blob.size });
       } catch (error) {
         this.fail(item.path, `Upload failed: ${error instanceof Error ? error.message : String(error)}`);
       }
