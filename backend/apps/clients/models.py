@@ -29,6 +29,11 @@ class ClientAccess(TenantModel):
     last_login_at = models.DateTimeField(null=True, blank=True)
     failed_attempts = models.PositiveSmallIntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
+    # Reminders for clients who have not submitted (see reminders.py). The studio sends them
+    # from its own WhatsApp; these record what it sent and when the owner was last emailed.
+    reminder_count = models.PositiveSmallIntegerField(default=0)
+    last_reminded_at = models.DateTimeField(null=True, blank=True)
+    reminder_emailed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["created_at"]

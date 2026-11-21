@@ -32,6 +32,8 @@ urlpatterns = [
         {"action": "unarchive"},
         name="event-unarchive",
     ),
+    path("reminders", views.RemindersView.as_view(), name="reminders"),
+    path("reminders/<uuid:pk>/sent", views.ReminderSentView.as_view(), name="reminder-sent"),
     # Client gallery
     path("client/login", views.ClientLoginView.as_view(), name="client-login"),
     path("client/logout", views.ClientLogoutView.as_view(), name="client-logout"),

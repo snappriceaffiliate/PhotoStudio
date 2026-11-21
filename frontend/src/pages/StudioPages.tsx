@@ -52,6 +52,10 @@ export function EventsPage() {
   const { items, error, reload } = useList<EventItem>('/events');
   const [filter, setFilter] = useState('all');
   const [deleteError, setDeleteError] = useState('');
+  const [remindersDue, setRemindersDue] = useState(0);
+  useEffect(() => {
+    api<{ count: number }>('/reminders').then((r) => setRemindersDue(r.count)).catch(() => undefined);
+  }, []);
   const current = FILTERS.find((f) => f.key === filter) ?? FILTERS[0];
   const shown = items?.filter(current.test) ?? null;
 
@@ -85,6 +89,15 @@ export function EventsPage() {
         <h1>Events</h1>
         {!open && <button onClick={() => setOpen(true)}>New event</button>}
       </div>
+
+      {remindersDue > 0 && (
+        <div className="reminder-banner" role="status">
+          <span>
+            {remindersDue} {remindersDue === 1 ? 'client has' : 'clients have'} not chosen their photos yet.
+          </span>
+          <Link className="button secondary" to="/reminders">Send reminders</Link>
+        </div>
+      )}
 
       {open && (
         <form className="panel" onSubmit={submit.onSubmit} noValidate>

@@ -26,6 +26,41 @@ export function invitationText(i: Invitation): string {
   ].join('\n');
 }
 
+export interface Reminder {
+  clientName: string;
+  studioName: string;
+  eventTitle: string;
+  galleryUrl: string;
+  username: string;
+  selected: number;
+  selectionLimit?: number | null;
+  /** The gallery closes after this date (YYYY-MM-DD), when the reminder is because of it. */
+  closesOn?: string | null;
+}
+
+/** A reminder for a client who has not submitted. The password was in the first message and
+ * the server keeps only a hash of it, so the reminder points back to that message. */
+export function reminderText(r: Reminder): string {
+  const firstName = r.clientName.trim().split(/\s+/)[0] || r.clientName;
+  const chosen = r.selected
+    ? ` You have chosen ${r.selected}${r.selectionLimit ? ` of ${r.selectionLimit}` : ''} so far; your choices are saved.`
+    : '';
+  const closes = r.closesOn
+    ? ` The gallery closes after ${new Date(`${r.closesOn}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })}, so please submit by then.`
+    : '';
+  return [
+    `Hello ${firstName}, a gentle reminder to choose your photos from ${r.eventTitle}.${chosen}${closes}`,
+    '',
+    'Open the gallery, tap ♡ on the photos you want printed, and press Submit when you are done.',
+    '',
+    `Gallery: ${r.galleryUrl}`,
+    `Username: ${r.username}`,
+    'Use the password from our earlier message. If you cannot find it, reply here and we will send a new one.',
+    '',
+    `– ${r.studioName}`,
+  ].join('\n');
+}
+
 /**
  * wa.me link. With a number (country code + digits, as the server stores it) WhatsApp opens
  * that chat; without one, the studio picks the contact inside WhatsApp.
