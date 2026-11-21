@@ -74,6 +74,11 @@ def put_object(key: str, data: bytes, content_type: str) -> None:
     )
 
 
+def read_object(key: str) -> bytes:
+    """The whole stored object (only for small files such as studio logos)."""
+    return internal_client().get_object(Bucket=settings.S3_BUCKET, Key=key)["Body"].read()
+
+
 def delete_object(key: str) -> None:
     internal_client().delete_object(Bucket=settings.S3_BUCKET, Key=key)
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Link } from 'react-router';
 import { api, apiUpload, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import { brandStyle, contrastWithWhite, isHexColour, makeLogo, MIN_CONTRAST } from '../branding/brand';
+import { brandStyle, contrastWithWhite, isHexColour, logoClass, makeLogo, MIN_CONTRAST } from '../branding/brand';
 import { BRAND_NAME, HeartIcon } from '../components/Brand';
 import { FormMessage } from '../components/Form';
 import { Loading } from '../components/Layouts';
@@ -10,6 +10,7 @@ import { Loading } from '../components/Layouts';
 interface Branding {
   studio_name: string;
   logo_url: string | null;
+  logo_tone?: 'light' | 'dark' | null;
   accent_color: string | null;
   allowed: boolean;
 }
@@ -81,7 +82,7 @@ export function ThemePage() {
   function removeLogo() {
     run('logo', async () => {
       await api('/studio/branding/logo', { method: 'DELETE' });
-      return { ...branding!, logo_url: null };
+      return { ...branding!, logo_url: null, logo_tone: null };
     }, 'Logo removed.');
   }
 
@@ -111,7 +112,7 @@ export function ThemePage() {
             <h2>Logo</h2>
             <p className="muted">PNG with a transparent background works best. We shrink it to a small file in your browser.</p>
             <div className="logo-drop">
-              {branding.logo_url ? <img src={branding.logo_url} alt={`${branding.studio_name} logo`} /> : <span className="muted">No logo yet</span>}
+              {branding.logo_url ? <img className={branding.logo_tone === 'light' ? 'on-dark' : undefined} src={branding.logo_url} alt={`${branding.studio_name} logo`} /> : <span className="muted">No logo yet</span>}
             </div>
             <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={chooseLogo} />
             <div className="actions">
@@ -171,7 +172,7 @@ export function ThemePage() {
           <h2 id="preview-title">What clients see</h2>
           <div className="brand-preview branded" style={brandStyle(valid && readable ? colour : branding.accent_color)}>
             <div className="brand-preview-cover">
-              {branding.logo_url ? <img className="studio-logo" src={branding.logo_url} alt="" /> : <p className="brand">{branding.studio_name}</p>}
+              {branding.logo_url ? <img className={logoClass(branding.logo_tone)} src={branding.logo_url} alt="" /> : <p className="brand">{branding.studio_name}</p>}
               <strong>Priya and Arun Wedding</strong>
               <span>1,240 photos · choose up to 200</span>
               <span className="preview-button">Start choosing</span>

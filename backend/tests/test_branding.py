@@ -106,6 +106,7 @@ def test_plan_without_branding_is_refused_and_hidden_from_clients(shared, api):
     Studio.objects.filter(pk=studio.pk).update(accent_color="#8A1C3B")
     assert shared["guest"].json("get", "/api/v1/client/me").json()["branding"] == {
         "logo_url": None,
+        "logo_tone": None,
         "accent_color": "#8A1C3B",
     }
     Plan.objects.filter(code="pro").update(custom_branding=False)
@@ -141,3 +142,42 @@ def test_theme_is_for_studio_and_pro_plans_not_starter(api, make_studio):
     refused = api.json("patch", "/api/v1/studio/branding", {"accent_color": "#8A1C3B"})
     assert refused.status_code == 402
     assert "Studio or Pro" in refused.json()["detail"]
+
+
+def webp_logo(colour, size=(240, 80)) -> bytes:
+    """A logo drawn in one colour on a transparent background."""
+    import io
+
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGBA", size, (0, 0, 0, 0))
+    ImageDraw.Draw(image).rectangle((20, 20, 220, 60), fill=colour)
+    out = io.BytesIO()
+    image.save(out, "WEBP")
+    return out.getvalue()
+
+
+@pytest.mark.parametrize(
+    "colour, tone",
+    [((255, 255, 255, 255), "light"), ((245, 230, 200, 255), "light"), ((30, 30, 30, 255), "dark")],
+)
+def test_a_white_logo_is_shown_on_a_dark_backing(owner_api, bucket, colour, tone):
+    response = upload(owner_api, webp_logo(colour))
+    assert response.status_code == 201
+    assert response.json()["logo_tone"] == tone
+    assert Studio.objects.get(pk=owner_api.studio.pk).logo_tone == tone
+    assert owner_api.json("delete", "/api/v1/studio/branding/logo").status_code == 204
+    assert Studio.objects.get(pk=owner_api.studio.pk).logo_tone == ""
+
+
+def test_logos_uploaded_earlier_are_checked_once(owner_api, monkeypatch):
+    Studio.objects.filter(pk=owner_api.studio.pk).update(logo_key="studios/x/logo/old.webp")
+    reads = []
+    monkeypatch.setattr(
+        storage,
+        "read_object",
+        lambda key: reads.append(key) or webp_logo((255, 255, 255, 255)),
+    )
+    assert owner_api.json("get", "/api/v1/studio/branding").json()["logo_tone"] == "light"
+    assert owner_api.json("get", "/api/v1/studio/branding").json()["logo_tone"] == "light"
+    assert reads == ["studios/x/logo/old.webp"]  # worked out once, then saved

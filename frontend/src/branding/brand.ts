@@ -11,6 +11,8 @@ const HEX = /^#[0-9a-f]{6}$/i;
 
 export interface StudioBranding {
   logo_url: string | null;
+  /** "light": a pale logo, shown on a dark backing; "dark" (or missing): shown on white. */
+  logo_tone?: 'light' | 'dark' | null;
   accent_color: string | null;
 }
 
@@ -66,3 +68,6 @@ export async function makeLogo(file: File): Promise<Blob> {
     bitmap.close();
   }
 }
+
+/** Class for a studio logo: a pale logo gets a dark backing so it stays visible. */
+export const logoClass = (tone?: string | null) => (tone === 'light' ? 'studio-logo on-dark' : 'studio-logo');
