@@ -454,3 +454,17 @@ figure img, .placeholder { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; 
 .reminder { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
 .reminder h2 { margin-bottom: 2px; }
 .reminder p { margin: 0; }
+
+/* ---------- Family helpers ---------- */
+.family-button { min-height: 38px; padding: 6px 14px; font-size: 14px; }
+.gallery-grid li { position: relative; }
+.chosen-by { position: absolute; left: 6px; bottom: 6px; max-width: calc(100% - 52px); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: rgba(20, 18, 16, 0.72); color: #ffffff; pointer-events: none; }
+.helper-note { font-size: 14px; text-align: right; }
+.family-dialog { max-width: 560px; }
+.family-heading { margin-top: 18px; }
+.family-list { list-style: none; margin: 0 0 12px; padding: 0; }
+.family-list li { display: flex; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.family-list li > span:first-child { flex: 1; }
+.family-summary { background: var(--marigold-soft); border-radius: var(--r); padding: 10px 12px; }

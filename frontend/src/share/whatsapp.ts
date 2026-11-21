@@ -22,6 +22,34 @@ export function invitationText(i: Invitation): string {
     `Username: ${i.username}`,
     `Password: ${i.password}`,
     '',
+    'Want family to help choose? Tap “Invite family” in the gallery instead of forwarding this message.',
+    '',
+    `– ${i.studioName}`,
+  ].join('\n');
+}
+
+export interface FamilyInvitation {
+  helperName: string;
+  mainName: string;
+  eventTitle: string;
+  galleryUrl: string;
+  username: string;
+  password: string;
+  studioName: string;
+}
+
+/** Sent by the main client to a relative they invite to help choose. */
+export function familyInvitationText(i: FamilyInvitation): string {
+  const first = (name: string) => name.trim().split(/\s+/)[0] || name;
+  return [
+    `Hello ${first(i.helperName)}, ${first(i.mainName)} would like your help choosing photos from ${i.eventTitle}.`,
+    '',
+    `Open the gallery and tap ♡ on the photos you like. ${first(i.mainName)} will see your picks and send the final selection.`,
+    '',
+    `Gallery: ${i.galleryUrl}`,
+    `Username: ${i.username}`,
+    `Password: ${i.password}`,
+    '',
     `– ${i.studioName}`,
   ].join('\n');
 }

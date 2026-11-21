@@ -39,6 +39,9 @@ PAGE_SIZE_MAX = 200
 
 class ShareRequest(serializers.Serializer):
     client_name = serializers.CharField(max_length=150, validators=[single_line])
+    role = serializers.ChoiceField(
+        choices=ClientAccess.Role.choices, required=False, default=ClientAccess.Role.MAIN
+    )
     email = serializers.EmailField(required=False, allow_blank=True, default="")
     phone = serializers.CharField(required=False, allow_blank=True, default="", max_length=30)
 
@@ -71,6 +74,8 @@ def _access_data(a: ClientAccess) -> dict:
         "is_active": a.is_active,
         "last_login_at": a.last_login_at,
         "created_at": a.created_at,
+        "role": a.role,
+        "invited_by": a.invited_by.client_name if a.invited_by_id else None,
     }
 
 
@@ -107,11 +112,25 @@ class EventClientsView(APIView):
                 {"detail": "Upload photos before sharing the event."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        main = None
+        if data.validated_data["role"] == ClientAccess.Role.HELPER:
+            main = (
+                ClientAccess.objects.for_studio(request.studio_id)
+                .filter(event=event, role=ClientAccess.Role.MAIN, is_active=True)
+                .first()
+            )
+            if main is None:
+                return Response(
+                    {"detail": "Share the event with the main client first."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         password = client_access.generate_password()
         with transaction.atomic():
             access = ClientAccess(
                 studio_id=request.studio_id,
                 event=event,
+                role=data.validated_data["role"],
+                invited_by=main,
                 client_name=data.validated_data["client_name"],
                 email=data.validated_data["email"].lower(),
                 phone=data.validated_data["phone"],
@@ -284,6 +303,11 @@ def _cover_url(event) -> str | None:
     return storage.signed_download_url(key) if key else None
 
 
+def _main_name(access: ClientAccess) -> str:
+    main = access.main_client()
+    return main.client_name if main else access.client_name
+
+
 class ClientMeView(ClientView):
     def get(self, request):
         event = request.client.event
@@ -292,6 +316,8 @@ class ClientMeView(ClientView):
         return Response(
             {
                 "client_name": request.client.client_name,
+                "role": request.client.role,
+                "main_name": _main_name(request.client),
                 "studio_name": request.client.studio.name,
                 "event": {
                     "title": event.title,
@@ -331,11 +357,13 @@ class ClientPhotosView(ClientView):
             except ValueError:
                 return Response({"detail": "album must be an album ID."}, status=400)
             photos = photos.filter(album_id=album)
-        notes = dict(
-            Selection.objects.for_studio(event.studio_id)
+        chosen = {
+            photo_id: (note, access_id, name)
+            for photo_id, note, access_id, name in Selection.objects.for_studio(event.studio_id)
             .filter(event=event)
-            .values_list("photo_id", "note")
-        )
+            .values_list("photo_id", "note", "client_access_id", "client_access__client_name")
+        }
+        notes = {photo_id: c[0] for photo_id, c in chosen.items()}
         if request.query_params.get("selected") == "1":
             photos = photos.filter(pk__in=notes.keys())
         total = photos.count()
@@ -353,6 +381,8 @@ class ClientPhotosView(ClientView):
                         "preview_url": storage.signed_download_url(p.preview_key),
                         "selected": p.pk in notes,
                         "note": notes.get(p.pk, ""),
+                        "chosen_by": chosen[p.pk][2] if p.pk in chosen else None,
+                        "chosen_by_me": p.pk in chosen and chosen[p.pk][1] == request.client.pk,
                     }
                     for p in rows
                 ],
@@ -362,6 +392,17 @@ class ClientPhotosView(ClientView):
 
 class NoteRequest(serializers.Serializer):
     note = serializers.CharField(max_length=500, allow_blank=True, required=False, default="")
+
+
+def _not_theirs(client: ClientAccess, selection: Selection) -> Response | None:
+    """Family helpers may change only the photos they chose themselves."""
+    if client.is_main or selection.client_access_id == client.pk:
+        return None
+    who = selection.client_access.client_name if selection.client_access_id else "Someone else"
+    return Response(
+        {"detail": f"{who} chose this photo. Only they or {_main_name(client)} can change it."},
+        status=status.HTTP_403_FORBIDDEN,
+    )
 
 
 class ClientSelectionView(ClientView):
@@ -395,6 +436,9 @@ class ClientSelectionView(ClientView):
                 Selection.objects.for_studio(studio_id).filter(event=event, photo=photo).first()
             )
             if existing:
+                refused = _not_theirs(request.client, existing)
+                if refused:
+                    return refused
                 existing.note = data.validated_data["note"]
                 existing.save(update_fields=["note", "updated_at"])
             else:
@@ -431,13 +475,28 @@ class ClientSelectionView(ClientView):
                     {"detail": "Your selection is already submitted."},
                     status=status.HTTP_409_CONFLICT,
                 )
-            Selection.objects.for_studio(studio_id).filter(event=event, photo_id=photo_id).delete()
+            existing = (
+                Selection.objects.for_studio(studio_id)
+                .filter(event=event, photo_id=photo_id)
+                .select_related("client_access")
+                .first()
+            )
+            if existing:
+                refused = _not_theirs(request.client, existing)
+                if refused:
+                    return refused
+                existing.delete()
             selected = Selection.objects.for_studio(studio_id).filter(event=event).count()
         return Response({"selected": False, "selected_count": selected})
 
 
 class ClientSubmitView(ClientView):
     def post(self, request):
+        if not request.client.is_main:
+            return Response(
+                {"detail": f"Only {_main_name(request.client)} can submit the final selection."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         studio_id = request.client.studio_id
         with transaction.atomic():
             event = (
@@ -479,7 +538,7 @@ def _selection_rows(request, event) -> list:
     selections = (
         Selection.objects.for_studio(request.studio_id)
         .filter(event=event)
-        .select_related("photo", "photo__album")
+        .select_related("photo", "photo__album", "client_access")
         .order_by("photo__sort_order", "photo__relative_path")
     )
     return [
@@ -516,6 +575,9 @@ class EventSelectionView(APIView):
                     "album": row.album,
                     "note": row.note,
                     "selected_at": row.selected_at,
+                    "chosen_by": selection.client_access.client_name
+                    if selection.client_access_id
+                    else None,
                     "thumb_url": storage.signed_download_url(photo.thumb_key)
                     if has_images
                     else None,
@@ -667,3 +729,136 @@ class ReminderSentView(APIView):
         return Response(
             {"reminder_count": access.reminder_count, "last_reminded_at": access.last_reminded_at}
         )
+
+
+# ---- Family helpers (the main client invites relatives from the gallery) ----------------
+
+
+class FamilyInvite(serializers.Serializer):
+    client_name = serializers.CharField(max_length=150, validators=[single_line])
+    phone = serializers.CharField(required=False, allow_blank=True, default="", max_length=30)
+
+    def validate_phone(self, value):
+        return whatsapp_number(value) if value.strip() else ""
+
+
+def _helper_data(a: ClientAccess, chosen: dict) -> dict:
+    return {
+        "id": str(a.pk),
+        "client_name": a.client_name,
+        "phone": a.phone,
+        "username": a.username,
+        "is_active": a.is_active,
+        "last_login_at": a.last_login_at,
+        "chosen": chosen.get(a.pk, 0),
+    }
+
+
+def _main_only(client: ClientAccess) -> Response | None:
+    if client.is_main:
+        return None
+    return Response(
+        {"detail": f"Only {_main_name(client)} can invite family."},
+        status=status.HTTP_403_FORBIDDEN,
+    )
+
+
+class ClientFamilyView(ClientView):
+    """GET: the main client's family helpers and how many photos each chose.
+    POST {client_name, phone}: invite one; the new login is returned once, to send on WhatsApp."""
+
+    def _chosen(self, client):
+        from django.db.models import Count
+
+        return dict(
+            Selection.objects.for_studio(client.studio_id)
+            .filter(event_id=client.event_id)
+            .values("client_access_id")
+            .annotate(n=Count("id"))
+            .values_list("client_access_id", "n")
+        )
+
+    def _helpers(self, client):
+        return ClientAccess.objects.for_studio(client.studio_id).filter(
+            event_id=client.event_id, role=ClientAccess.Role.HELPER
+        )
+
+    def get(self, request):
+        refused = _main_only(request.client)
+        if refused:
+            return refused
+        chosen = self._chosen(request.client)
+        return Response(
+            {
+                "you": {
+                    "client_name": request.client.client_name,
+                    "chosen": chosen.get(request.client.pk, 0),
+                },
+                "helpers": [_helper_data(a, chosen) for a in self._helpers(request.client)],
+                "max_helpers": ClientAccess.MAX_HELPERS,
+            }
+        )
+
+    def post(self, request):
+        client = request.client
+        refused = _main_only(client)
+        if refused:
+            return refused
+        data = FamilyInvite(data=request.data)
+        data.is_valid(raise_exception=True)
+        if client.event.status == Event.Status.SUBMITTED:
+            return Response(
+                {"detail": "Your selection is already submitted."}, status=status.HTTP_409_CONFLICT
+            )
+        if self._helpers(client).filter(is_active=True).count() >= ClientAccess.MAX_HELPERS:
+            return Response(
+                {"detail": f"You can invite up to {ClientAccess.MAX_HELPERS} family members."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        password = client_access.generate_password()
+        helper = ClientAccess(
+            studio_id=client.studio_id,
+            event_id=client.event_id,
+            role=ClientAccess.Role.HELPER,
+            invited_by=client,
+            client_name=data.validated_data["client_name"],
+            phone=data.validated_data["phone"],
+            username=client_access.generate_username(data.validated_data["client_name"]),
+        )
+        helper.set_password(password)
+        helper.save()
+        record(
+            request,
+            "client.family_invited",
+            client.event,
+            helper.client_name,
+            studio_id=client.studio_id,
+        )
+        return Response(
+            {**_helper_data(helper, {}), "password": password}, status=status.HTTP_201_CREATED
+        )
+
+
+class ClientFamilyTurnOffView(ClientView):
+    """POST: the main client turns off a family helper's login."""
+
+    def post(self, request, pk):
+        refused = _main_only(request.client)
+        if refused:
+            return refused
+        helper = get_object_or_404(
+            ClientAccess.objects.for_studio(request.client.studio_id),
+            pk=pk,
+            event_id=request.client.event_id,
+            role=ClientAccess.Role.HELPER,
+        )
+        helper.is_active = False
+        helper.save(update_fields=["is_active", "updated_at"])
+        record(
+            request,
+            "client.family_turned_off",
+            request.client.event,
+            helper.client_name,
+            studio_id=request.client.studio_id,
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)

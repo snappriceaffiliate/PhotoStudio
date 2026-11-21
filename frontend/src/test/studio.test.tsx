@@ -239,7 +239,7 @@ describe('an event', () => {
     press('Share with client');
     expect(await screen.findByText('Abcd-Efgh-1234')).toBeTruthy();
     expect(callsTo(calls, 'POST', '/api/v1/events/e1/clients')[0].body).toEqual({
-      client_name: 'Priya Rao', email: '', phone: '98765 43210',
+      client_name: 'Priya Rao', email: '', phone: '98765 43210', role: 'main',
     });
     const link = screen.getByRole('link', { name: 'Send on WhatsApp' });
     expect(link.getAttribute('href')).toContain('https://wa.me/919876543210?text=');

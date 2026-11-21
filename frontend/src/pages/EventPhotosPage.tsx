@@ -13,6 +13,7 @@ interface Tile {
   chosen: boolean;
   note: string;
   time: string;
+  by: string | null;
 }
 
 interface ListPhoto {
@@ -31,6 +32,7 @@ interface ChosenPhoto {
   filename: string;
   note: string;
   selected_at: string;
+  chosen_by?: string | null;
   thumb_url: string | null;
   preview_url: string | null;
 }
@@ -53,12 +55,12 @@ const SORTS = [
 
 const fromList = (p: ListPhoto): Tile => ({
   id: p.id, path: p.relative_path, name: p.original_filename, thumb: p.thumb_url, preview: p.preview_url,
-  chosen: p.chosen, note: '', time: p.created_at,
+  chosen: p.chosen, note: '', time: p.created_at, by: null,
 });
 
 const fromChosen = (p: ChosenPhoto): Tile => ({
   id: p.photo_id, path: p.relative_path, name: p.filename, thumb: p.thumb_url, preview: p.preview_url,
-  chosen: true, note: p.note, time: p.selected_at,
+  chosen: true, note: p.note, time: p.selected_at, by: p.chosen_by ?? null,
 });
 
 /** The client's choices come as one list; sort them here the same way the server sorts photos. */
@@ -181,6 +183,8 @@ export function EventPhotosPage() {
   }
 
   const shown = tiles ?? [];
+  // Show who chose each photo when family helped, i.e. when more than one person chose.
+  const choosers = new Set(shown.map((t) => t.by).filter(Boolean));
   const allPicked = shown.length > 0 && shown.every((t) => picked.has(t.id));
 
   return (
@@ -255,7 +259,9 @@ export function EventPhotosPage() {
               <input type="checkbox" checked={picked.has(t.id)} onChange={() => toggle(t.id)} aria-label={`Select ${t.name}`} />
             </label>
             {t.chosen && tab === 'all' && <span className="tile-badge">Chosen</span>}
-            <p className="tile-name" title={t.path}>{t.name}{t.note ? ` · ${t.note}` : ''}</p>
+            <p className="tile-name" title={t.path}>
+              {t.name}{choosers.size > 1 && t.by ? ` · by ${t.by}` : ''}{t.note ? ` · ${t.note}` : ''}
+            </p>
           </li>
         ))}
       </ul>

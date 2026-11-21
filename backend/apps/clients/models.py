@@ -11,12 +11,27 @@ LOCKOUT_MINUTES = 15
 
 
 class ClientAccess(TenantModel):
-    """A client's login to one event. Clients are not platform users and see only that event."""
+    """A client's login to one event. Clients are not platform users and see only that event.
+
+    The main client (the couple, the family) chooses and submits. Family helpers, invited by
+    the main client from the gallery or added by the studio, have their own login: they can
+    choose photos and remove their own picks, but only the main client can submit.
+    """
+
+    class Role(models.TextChoices):
+        MAIN = "main", "Main client"
+        HELPER = "helper", "Family helper"
+
+    MAX_HELPERS = 10
 
     event = models.ForeignKey(
         "events.Event", on_delete=models.CASCADE, related_name="client_accesses"
     )
     client_name = models.CharField(max_length=150)
+    role = models.CharField(max_length=10, choices=Role.choices, default=Role.MAIN)
+    invited_by = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="helpers"
+    )
     email = models.EmailField(blank=True)
     phone = models.CharField(
         max_length=16,
@@ -40,6 +55,22 @@ class ClientAccess(TenantModel):
 
     def __str__(self) -> str:
         return f"{self.client_name} ({self.username})"
+
+    @property
+    def is_main(self) -> bool:
+        return self.role == self.Role.MAIN
+
+    def main_client(self) -> "ClientAccess | None":
+        """The main client this login belongs to (itself for a main client)."""
+        if self.is_main:
+            return self
+        if self.invited_by_id:
+            return self.invited_by
+        return (
+            ClientAccess.objects.for_studio(self.studio_id)
+            .filter(event_id=self.event_id, role=self.Role.MAIN)
+            .first()
+        )
 
     def set_password(self, raw: str) -> None:
         self.password_hash = make_password(raw)

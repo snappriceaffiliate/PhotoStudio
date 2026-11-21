@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { Field, FormMessage, useSubmit } from '../components/Form';
-import { formatPhone, invitationText, whatsappLink } from '../share/whatsapp';
+import { familyInvitationText, formatPhone, invitationText, whatsappLink } from '../share/whatsapp';
 import type { EventDetail } from './EventPage';
 
 interface ClientLogin {
@@ -14,6 +14,8 @@ interface ClientLogin {
   is_active: boolean;
   last_login_at: string | null;
   password?: string;
+  role?: 'main' | 'helper';
+  invited_by?: string | null;
 }
 
 interface ProgressInfo {
@@ -51,8 +53,13 @@ export function SharePanel({ event, onChanged }: { event: EventDetail; onChanged
     return () => window.clearInterval(timer);
   }, [load]);
 
+  // Once the main client has a login, new logins are for family helping them.
+  const main = clients.find((c) => c.role !== 'helper' && c.is_active) ?? null;
   const share = useSubmit(async () => {
-    const created = await api<ClientLogin>(`/events/${event.id}/clients`, { method: 'POST', body: form });
+    const created = await api<ClientLogin>(`/events/${event.id}/clients`, {
+      method: 'POST',
+      body: { ...form, role: main ? 'helper' : 'main' },
+    });
     setRevealed(created);
     setForm({ client_name: '', email: '', phone: '' });
     await load();
@@ -79,7 +86,17 @@ export function SharePanel({ event, onChanged }: { event: EventDetail; onChanged
   const galleryLink = (username: string) => `${window.location.origin}/gallery/login?u=${username}`;
 
   const message = (c: ClientLogin) =>
-    invitationText({
+    c.role === 'helper'
+      ? familyInvitationText({
+          helperName: c.client_name,
+          mainName: c.invited_by ?? main?.client_name ?? '',
+          eventTitle: event.title,
+          galleryUrl: galleryLink(c.username),
+          username: c.username,
+          password: c.password ?? '',
+          studioName: user?.studio?.name ?? '',
+        })
+      : invitationText({
       clientName: c.client_name,
       studioName: user?.studio?.name ?? '',
       eventTitle: event.title,
@@ -151,7 +168,7 @@ export function SharePanel({ event, onChanged }: { event: EventDetail; onChanged
             <li key={c.id}>
               <strong>{c.client_name}</strong>{' '}
               <span className="muted">
-                · {c.username}{c.phone ? ` · ${formatPhone(c.phone)}` : ''}{c.is_active ? '' : ' · access off'}
+                · {c.role === 'helper' ? `Family, helping ${c.invited_by ?? 'the client'}` : 'Main client'} · {c.username}{c.phone ? ` · ${formatPhone(c.phone)}` : ''}{c.is_active ? '' : ' · access off'}
               </span>
               <div className="row-actions">
                 <button className="link" onClick={() => act(c, 'reset-password')}>New password</button>
@@ -165,13 +182,15 @@ export function SharePanel({ event, onChanged }: { event: EventDetail; onChanged
       {canShare ? (
         <form onSubmit={share.onSubmit} noValidate>
           <p className="muted">
-            {clients.length ? 'Add another login, for example for family.' : 'Send the client a login to choose their photos.'}
+            {main
+              ? `Add a family member to help ${main.client_name} choose. They get their own login; only ${main.client_name} can send the final selection. ${main.client_name} can also invite family from the gallery.`
+              : 'Send the client a login to choose their photos.'}
             {emailSharing ? '' : ' You send it on WhatsApp.'}
           </p>
           <FormMessage error={share.error} />
-          <Field label="Client name" name="client_name" required errors={share.fields}
+          <Field label={main ? 'Family member name' : 'Client name'} name="client_name" required errors={share.fields}
             value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} />
-          <Field label="Client WhatsApp number" name="phone" type="tel" autoComplete="tel" inputMode="tel" errors={share.fields}
+          <Field label={main ? 'Their WhatsApp number' : 'Client WhatsApp number'} name="phone" type="tel" autoComplete="tel" inputMode="tel" errors={share.fields}
             required={!emailSharing}
             hint="For example 98765 43210. Add + and the country code for numbers outside India."
             value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
@@ -180,7 +199,9 @@ export function SharePanel({ event, onChanged }: { event: EventDetail; onChanged
               hint="We email the login too when you add one."
               value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           )}
-          <button type="submit" disabled={share.busy}>{share.busy ? 'Sharing…' : 'Share with client'}</button>
+          <button type="submit" disabled={share.busy}>
+            {share.busy ? 'Sharing…' : main ? 'Add family member' : 'Share with client'}
+          </button>
         </form>
       ) : (
         <p className="muted">Upload photos before sharing this event.</p>
