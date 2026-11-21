@@ -41,7 +41,7 @@ interface PhotoPage {
 
 export const STATUS_LABELS: Record<string, string> = {
   draft: 'Draft',
-  uploading: 'Uploading',
+  uploading: 'Ready to share',
   shared: 'Shared with client',
   submitted: 'Selection received',
   archived: 'Archived',

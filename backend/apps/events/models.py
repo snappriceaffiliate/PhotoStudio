@@ -9,7 +9,7 @@ class Event(TenantModel):
 
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
-        UPLOADING = "uploading", "Uploading"
+        UPLOADING = "uploading", "Ready to share"
         SHARED = "shared", "Shared"
         SUBMITTED = "submitted", "Submitted"
         ARCHIVED = "archived", "Archived"
