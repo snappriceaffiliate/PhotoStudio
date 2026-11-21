@@ -68,6 +68,9 @@ class TestTrial:
                 "full_name": "Asha",
                 "email": "a@example.com",
                 "password": PASSWORD,
+                "phone": "98765 43210",
+                "pincode": "600028",
+                "password_confirm": PASSWORD,
             },
         )
         billing = response.json()["user"]["billing"]

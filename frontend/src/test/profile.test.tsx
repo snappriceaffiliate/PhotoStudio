@@ -7,7 +7,7 @@ import { callsTo, mockApi, owner, press, renderApp, reply, session, staff, typeI
 installBrowserMocks();
 
 const stored = {
-  name: 'Lens and Light', phone: '919876543210', contact_email: '', address: '', city: 'Chennai', website: '', instagram: 'lens',
+  name: 'Lens and Light', phone: '919876543210', contact_email: '', address: '', city: 'Chennai', pincode: '', website: '', instagram: 'lens',
 };
 
 describe('studio profile', () => {

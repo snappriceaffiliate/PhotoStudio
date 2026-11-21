@@ -2,7 +2,7 @@ from django.contrib.auth import password_validation
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
-from apps.core.validators import single_line
+from apps.core.validators import pincode, single_line, whatsapp_number
 
 from .models import User
 
@@ -26,7 +26,20 @@ class SignupSerializer(serializers.Serializer):
     studio_name = serializers.CharField(max_length=200, validators=[single_line])
     full_name = serializers.CharField(max_length=150, validators=[single_line])
     email = serializers.EmailField()
+    phone = serializers.CharField(
+        max_length=30, error_messages={"blank": "Enter your WhatsApp number."}
+    )
+    pincode = serializers.CharField(
+        max_length=10, error_messages={"blank": "Enter your studio's PIN code."}
+    )
     password = serializers.CharField(write_only=True, trim_whitespace=False)
+    password_confirm = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate_phone(self, value):
+        return whatsapp_number(value)
+
+    def validate_pincode(self, value):
+        return pincode(value)
 
     def validate_email(self, value):
         value = value.strip().lower()
@@ -41,6 +54,8 @@ class SignupSerializer(serializers.Serializer):
         except DjangoValidationError as exc:
             # Report under the password field so the form shows it next to that input.
             raise serializers.ValidationError({"password": exc.messages}) from exc
+        if attrs["password_confirm"] != attrs["password"]:
+            raise serializers.ValidationError({"password_confirm": ["The passwords do not match."]})
         return attrs
 
 

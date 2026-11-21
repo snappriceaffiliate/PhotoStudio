@@ -10,11 +10,12 @@ interface Profile {
   contact_email: string;
   address: string;
   city: string;
+  pincode: string;
   website: string;
   instagram: string;
 }
 
-const EMPTY: Profile = { name: '', phone: '', contact_email: '', address: '', city: '', website: '', instagram: '' };
+const EMPTY: Profile = { name: '', phone: '', contact_email: '', address: '', city: '', pincode: '', website: '', instagram: '' };
 
 /** Shows a stored WhatsApp number (country code and digits) the way people write it. */
 function showPhone(digits: string): string {
@@ -66,7 +67,7 @@ function StudioForm({ initial, editable, onSaved }: { initial: Profile; editable
       <h2>Studio profile</h2>
       <p className="muted">
         {editable
-          ? 'Clients see your WhatsApp number, email, city, website and Instagram at the bottom of their gallery. Your street address stays private.'
+          ? 'Clients see your WhatsApp number, email, city, website and Instagram at the bottom of their gallery. Your street address and PIN code stay private.'
           : 'Only the studio owner can change these details.'}
       </p>
       <form onSubmit={onSubmit} noValidate>
@@ -81,6 +82,9 @@ function StudioForm({ initial, editable, onSaved }: { initial: Profile; editable
           <Field label="Address" name="address" value={form.address} onChange={set('address')} errors={fields} maxLength={300} autoComplete="street-address" />
           <div className="row">
             <Field label="City" name="city" value={form.city} onChange={set('city')} errors={fields} maxLength={100} autoComplete="address-level2" />
+            <Field label="PIN code" name="pincode" value={form.pincode} onChange={set('pincode')} errors={fields} maxLength={7} inputMode="numeric" autoComplete="postal-code" />
+          </div>
+          <div className="row">
             <Field label="Website" name="website" value={form.website} onChange={set('website')} errors={fields} placeholder="yourstudio.in" />
             <Field label="Instagram" name="instagram" value={form.instagram} onChange={set('instagram')} errors={fields} placeholder="yourstudio" />
           </div>

@@ -61,6 +61,9 @@ class TestConfirmedEmailRequired:
                 "full_name": "Asha",
                 "email": "a@example.com",
                 "password": PASSWORD,
+                "phone": "98765 43210",
+                "pincode": "600028",
+                "password_confirm": PASSWORD,
             },
         )
         user = User.objects.get(email="a@example.com")

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { api } from '../api/client';
+import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import type { MeResponse } from '../auth/types';
 import { Field, FormMessage, useSubmit } from '../components/Form';
@@ -32,9 +32,15 @@ export function LoginPage() {
 
 export function SignupPage() {
   const { setUser } = useAuth();
-  const [form, setForm] = useState({ studio_name: '', full_name: '', email: '', password: '' });
+  const [form, setForm] = useState({
+    studio_name: '', full_name: '', email: '', phone: '', pincode: '', password: '', password_confirm: '',
+  });
   const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [key]: e.target.value });
   const { busy, error, fields, onSubmit } = useSubmit(async () => {
+    // Catch a mistyped password here; the server checks it again.
+    if (form.password_confirm && form.password_confirm !== form.password) {
+      throw new ApiError(400, { password_confirm: ['The passwords do not match.'] });
+    }
     setUser((await api<MeResponse>('/auth/signup', { method: 'POST', body: form })).user);
   });
   return (
@@ -47,8 +53,16 @@ export function SignupPage() {
           value={form.full_name} onChange={set('full_name')} />
         <Field label="Email" name="email" type="email" required autoComplete="email" errors={fields}
           value={form.email} onChange={set('email')} />
+        <div className="row">
+          <Field label="WhatsApp number" name="phone" type="tel" required autoComplete="tel" errors={fields}
+            placeholder="98765 43210" value={form.phone} onChange={set('phone')} />
+          <Field label="Studio PIN code" name="pincode" required autoComplete="postal-code" inputMode="numeric" maxLength={7} errors={fields}
+            placeholder="600028" value={form.pincode} onChange={set('pincode')} />
+        </div>
         <Field label="Password" name="password" type="password" required autoComplete="new-password" errors={fields}
           hint="At least 8 characters, not a common password." value={form.password} onChange={set('password')} />
+        <Field label="Retype password" name="password_confirm" type="password" required autoComplete="new-password" errors={fields}
+          value={form.password_confirm} onChange={set('password_confirm')} />
         <button type="submit" className="wide" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
       </form>
     </AuthLayout>

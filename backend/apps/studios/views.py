@@ -16,7 +16,7 @@ from apps.accounts.permissions import IsStudioMember, IsStudioOwner
 from apps.audit.models import record
 from apps.billing import entitlements
 from apps.core import storage
-from apps.core.validators import single_line, whatsapp_number
+from apps.core.validators import pincode, single_line, whatsapp_number
 
 from .models import Studio
 
@@ -173,7 +173,16 @@ class BrandingLogoView(APIView):
 
 # ---- Studio profile -------------------------------------------------------------------
 
-PROFILE_FIELDS = ["name", "phone", "contact_email", "address", "city", "website", "instagram"]
+PROFILE_FIELDS = [
+    "name",
+    "phone",
+    "contact_email",
+    "address",
+    "city",
+    "pincode",
+    "website",
+    "instagram",
+]
 INSTAGRAM_HANDLE = re.compile(r"^[A-Za-z0-9._]{1,30}$")
 
 
@@ -190,6 +199,7 @@ class ProfileSerializer(serializers.ModelSerializer):
     city = serializers.CharField(
         max_length=100, allow_blank=True, required=False, validators=[single_line]
     )
+    pincode = serializers.CharField(max_length=10, allow_blank=True, required=False)
     website = serializers.CharField(max_length=200, allow_blank=True, required=False)
     instagram = serializers.CharField(max_length=60, allow_blank=True, required=False)
 
@@ -205,6 +215,9 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     def validate_phone(self, value):
         return whatsapp_number(value) if value.strip() else ""
+
+    def validate_pincode(self, value):
+        return pincode(value) if value.strip() else ""
 
     def validate_website(self, value):
         value = value.strip()
