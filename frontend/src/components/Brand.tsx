@@ -1,31 +1,52 @@
 /**
- * Brand mark and shared icons. The mark is a camera viewfinder (four corners) framing a
- * heart: the moment a client chooses a photo. Product name lives in one place: BRAND_NAME.
+ * Brand mark and shared icons. The mark is a photo whose horizon is a tick: the moment a client
+ * chooses a photo. The files for print, web and social media are in brand/ at the repo root.
+ * Product name lives in one place: BRAND_NAME.
  */
+import { useId } from 'react';
+import { LOGO_HEIGHT, LOGO_WIDTH, PICK_PATH, SNAP_PATH, TEXT_BASELINE, TEXT_X } from './logoPaths';
 
 export const BRAND_NAME = 'PickSnap';
 
+/** The icon's shapes in its own 6..74 box; the colours are fixed brand colours. */
+function MarkShapes() {
+  const clip = useId();
+  return (
+    <>
+      <defs>
+        <clipPath id={clip}><rect x="6" y="6" width="68" height="68" rx="16" /></clipPath>
+      </defs>
+      <rect x="6" y="6" width="68" height="68" rx="16" fill="#3b2f8f" />
+      <circle cx="54" cy="22" r="7" fill="#ffd9a0" />
+      <path d="M0 40L30 62L80 18V80H0Z" fill="#ff6b5a" clipPath={`url(#${clip})`} />
+    </>
+  );
+}
+
 export function LogoMark({ size = 32 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-      <rect width="32" height="32" rx="9" fill="var(--primary)" />
-      <path
-        d="M8 12V9a1 1 0 0 1 1-1h3M20 8h3a1 1 0 0 1 1 1v3M24 20v3a1 1 0 0 1-1 1h-3M12 24H9a1 1 0 0 1-1-1v-3"
-        stroke="var(--on-primary)" strokeWidth="2" strokeLinecap="round" fill="none"
-      />
-      <path
-        d="M16 21.2s-5-3-5-6.4a2.8 2.8 0 0 1 5-1.7 2.8 2.8 0 0 1 5 1.7c0 3.4-5 6.4-5 6.4Z"
-        fill="var(--marigold)"
-      />
+    <svg width={size} height={size} viewBox="6 6 68 68" aria-hidden="true" focusable="false">
+      <MarkShapes />
     </svg>
   );
 }
 
+/** The icon and the name on one line; `size` is the icon's height. */
 export function Logo({ size = 32, withName = true }: { size?: number; withName?: boolean }) {
+  if (!withName) {
+    return <span className="logo"><LogoMark size={size} /></span>;
+  }
+  const iconScale = LOGO_HEIGHT / 68;
   return (
     <span className="logo">
-      <LogoMark size={size} />
-      {withName && <span className="wordmark">{BRAND_NAME}</span>}
+      <svg width={(size * LOGO_WIDTH) / LOGO_HEIGHT} height={size} viewBox={`0 0 ${LOGO_WIDTH} ${LOGO_HEIGHT}`}
+        role="img" aria-label={BRAND_NAME}>
+        <g transform={`scale(${iconScale}) translate(-6 -6)`}><MarkShapes /></g>
+        <g transform={`translate(${TEXT_X} ${TEXT_BASELINE})`}>
+          <path className="logo-pick" d={PICK_PATH} />
+          <path className="logo-snap" d={SNAP_PATH} />
+        </g>
+      </svg>
     </span>
   );
 }

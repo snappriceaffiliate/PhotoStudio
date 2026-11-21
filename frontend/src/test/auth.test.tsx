@@ -20,6 +20,8 @@ describe('logging in', () => {
     mockApi({ ...routes, ...events });
     renderApp('/events');
     expect(await screen.findByRole('heading', { name: 'Log in to your studio' })).toBeTruthy();
+    // The logo's lettering is drawn as shapes, so it carries the name for screen readers.
+    expect(screen.getByRole('img', { name: 'PickSnap' })).toBeTruthy();
   });
 
   it('logs in and lands on the events screen', async () => {
