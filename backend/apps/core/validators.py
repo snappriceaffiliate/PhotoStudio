@@ -28,6 +28,14 @@ def safe_relative_path(value: str) -> str:
     return value
 
 
+def pincode(value: str) -> str:
+    """An Indian PIN code: six digits, not starting with 0. Spaces are ignored."""
+    value = value.replace(" ", "").strip()
+    if not (len(value) == 6 and value.isdigit() and value[0] != "0"):
+        raise serializers.ValidationError("Enter a 6-digit PIN code, for example 600028.")
+    return value
+
+
 def whatsapp_number(value: str) -> str:
     """A phone number as WhatsApp links need it: country code and number, digits only.
 

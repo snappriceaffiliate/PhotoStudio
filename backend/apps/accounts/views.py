@@ -101,7 +101,10 @@ class SignupView(PublicView):
         v = data.validated_data
         with transaction.atomic():
             studio = Studio.objects.create(
-                name=v["studio_name"], slug=_unique_slug(v["studio_name"])
+                name=v["studio_name"],
+                slug=_unique_slug(v["studio_name"]),
+                phone=v["phone"],
+                pincode=v["pincode"],
             )
             user = User.objects.create_user(
                 email=v["email"],

@@ -88,6 +88,7 @@ describe('signing up', () => {
     typeInto('Your name', 'Asha');
     typeInto('Email', 'asha@example.com');
     typeInto('Password', 'a-strong-pass-91');
+    typeInto('Retype password', 'a-strong-pass-91');
     press('Create account');
     const message = await screen.findByText('A studio with this email already exists.');
     expect(screen.getByLabelText('Email').getAttribute('aria-invalid')).toBe('true');
@@ -109,12 +110,29 @@ describe('signing up', () => {
     typeInto('Studio name', 'Lens and Light');
     typeInto('Your name', 'Owner One');
     typeInto('Email', 'owner@lens.test');
+    typeInto('WhatsApp number', '98765 43210');
+    typeInto('Studio PIN code', '600028');
     typeInto('Password', 'a-strong-pass-91');
+    typeInto('Retype password', 'a-strong-pass-91');
     press('Create account');
     expect(await screen.findByRole('heading', { name: 'Events' })).toBeTruthy();
     expect(callsTo(calls, 'POST', '/api/v1/auth/signup')[0].body).toEqual({
-      studio_name: 'Lens and Light', full_name: 'Owner One', email: 'owner@lens.test', password: 'a-strong-pass-91',
+      studio_name: 'Lens and Light', full_name: 'Owner One', email: 'owner@lens.test', phone: '98765 43210', pincode: '600028',
+      password: 'a-strong-pass-91', password_confirm: 'a-strong-pass-91',
     });
+  });
+
+  it('catches a mistyped password before sending', async () => {
+    const s = session();
+    const calls = mockApi({ ...s.routes });
+    renderApp('/signup');
+    await screen.findByRole('heading', { name: 'Create your studio account' });
+    typeInto('Password', 'a-strong-pass-91');
+    typeInto('Retype password', 'a-strong-pass-19');
+    press('Create account');
+    const message = await screen.findByText('The passwords do not match.');
+    expect(message.id).toBe('field-password_confirm-error');
+    expect(callsTo(calls, 'POST', '/api/v1/auth/signup')).toHaveLength(0);
   });
 });
 

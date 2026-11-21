@@ -22,6 +22,7 @@ class Studio(TimestampedModel):
     contact_email = models.EmailField(blank=True)
     address = models.CharField(max_length=300, blank=True)
     city = models.CharField(max_length=100, blank=True)
+    pincode = models.CharField(max_length=6, blank=True)
     website = models.URLField(max_length=200, blank=True)
     instagram = models.CharField(max_length=30, blank=True, help_text="Handle without the @.")
 

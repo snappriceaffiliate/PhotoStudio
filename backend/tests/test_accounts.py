@@ -15,6 +15,9 @@ SIGNUP = {
     "full_name": "Asha Rao",
     "email": "Asha@Example.com",
     "password": PASSWORD,
+    "phone": "98765 43210",
+    "pincode": "600028",
+    "password_confirm": PASSWORD,
 }
 
 
@@ -44,6 +47,23 @@ class TestSignup:
         assert api.json("get", "/api/v1/auth/me").json()["user"]["email"] == "asha@example.com"
         assert outbox[0][0] == "asha@example.com"
 
+    def test_saves_the_studio_phone_and_pincode(self, api, outbox):
+        api.json("post", "/api/v1/auth/signup", SIGNUP)
+        profile = api.json("get", "/api/v1/studio/profile").json()
+        assert (profile["phone"], profile["pincode"]) == ("919876543210", "600028")
+
+    def test_the_two_passwords_must_match(self, api, outbox):
+        response = api.json("post", "/api/v1/auth/signup", {**SIGNUP, "password_confirm": "other"})
+        assert response.status_code == 400
+        assert response.json()["password_confirm"] == ["The passwords do not match."]
+
+    def test_refuses_a_bad_pincode_or_phone(self, api, outbox):
+        response = api.json(
+            "post", "/api/v1/auth/signup", {**SIGNUP, "pincode": "12345", "phone": "123"}
+        )
+        assert response.status_code == 400
+        assert {"pincode", "phone"} <= set(response.json())
+
     def test_queues_the_verification_email_as_a_background_job(
         self, api, django_capture_on_commit_callbacks
     ):
@@ -65,7 +85,12 @@ class TestSignup:
         weak = api.json(
             "post",
             "/api/v1/auth/signup",
-            {**SIGNUP, "email": "c@example.com", "password": "12345678"},
+            {
+                **SIGNUP,
+                "email": "c@example.com",
+                "password": "12345678",
+                "password_confirm": "12345678",
+            },
         )
         assert weak.status_code == 400
         # Reported on the password field, so the form shows it next to that input.

@@ -160,6 +160,9 @@ class TestAccountEdges:
                 "full_name": "Someone",
                 "email": owner.email.upper(),
                 "password": PASSWORD,
+                "phone": "98765 43210",
+                "pincode": "600028",
+                "password_confirm": PASSWORD,
             },
         )
         assert response.status_code == 400 and "email" in response.json()
@@ -167,7 +170,15 @@ class TestAccountEdges:
     def test_signup_validates_every_field(self, api):
         response = api.json("post", "/api/v1/auth/signup", {})
         assert response.status_code == 400
-        assert {"studio_name", "full_name", "email", "password"} <= set(response.json())
+        assert {
+            "studio_name",
+            "full_name",
+            "email",
+            "phone",
+            "pincode",
+            "password",
+            "password_confirm",
+        } <= set(response.json())
 
     def test_logout_ends_the_studio_session(self, api, make_studio):
         _, owner = make_studio("alpha")

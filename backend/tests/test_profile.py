@@ -27,6 +27,7 @@ class TestStudioProfile:
                 "contact_email": "hello@lens.test",
                 "address": "12 MG Road",
                 "city": "Chennai",
+                "pincode": "600 028",
                 "website": "lensandlight.in",
                 "instagram": "https://www.instagram.com/lens.and_light/",
             },
@@ -38,6 +39,7 @@ class TestStudioProfile:
             "contact_email": "hello@lens.test",
             "address": "12 MG Road",
             "city": "Chennai",
+            "pincode": "600028",
             "website": "https://lensandlight.in",
             "instagram": "lens.and_light",
         }
