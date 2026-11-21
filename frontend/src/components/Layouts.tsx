@@ -54,7 +54,10 @@ export function StudioLayout() {
       <header className="topbar">
         <div className="topbar-inner">
           <Link to="/events" className="logo" aria-label="Events"><Logo size={30} withName={false} /></Link>
-          <Link to="/events" className="studio-name">{user.studio.name}</Link>
+          <Link to="/events" className="studio-name" title={user.studio.name}>
+            <span className="studio-kicker" aria-hidden="true">Studio</span>
+            <span className="studio-title">{user.studio.name}</span>
+          </Link>
           <nav aria-label="Main">
             <NavLink to="/events">Events</NavLink>
             {user.role === 'owner' && <NavLink to="/staff">Staff</NavLink>}
