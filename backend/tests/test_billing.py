@@ -87,6 +87,14 @@ class TestTrial:
         api.json("post", f"/api/v1/events/{first.json()['id']}/archive")
         assert api.json("post", "/api/v1/events", {"title": "Two"}).status_code == 201
 
+    def test_the_trial_event_limit_is_a_setting(self, api, owner_on_trial, settings):
+        settings.TRIAL_MAX_ACTIVE_EVENTS = 5
+        for n in range(5):
+            assert api.json("post", "/api/v1/events", {"title": f"E{n}"}).status_code == 201
+        sixth = api.json("post", "/api/v1/events", {"title": "Six"})
+        assert sixth.status_code == 402
+        assert "5 active events" in sixth.json()["detail"]
+
     def test_trial_staff_limit(self, api, owner_on_trial):
         assert (
             api.json("post", "/api/v1/staff", {"full_name": "A", "email": "a@x.com"}).status_code

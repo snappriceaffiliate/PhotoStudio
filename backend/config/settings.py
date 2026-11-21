@@ -232,6 +232,8 @@ RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
 RAZORPAY_API_BASE = "https://api.razorpay.com/v1"
 TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "30"))
+# Active events a studio on the free trial may have at once.
+TRIAL_MAX_ACTIVE_EVENTS = int(os.environ.get("TRIAL_MAX_ACTIVE_EVENTS", "1"))
 
 # Sharing galleries with clients. Until an email service is set up, studios share by WhatsApp
 # only and do not have to confirm their own email first. Turn both on once email works.
