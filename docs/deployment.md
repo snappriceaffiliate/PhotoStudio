@@ -134,6 +134,7 @@ needs a new Razorpay plan; existing subscribers stay on the old one.
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | from Razorpay API keys (test or live) | For payments |
 | `RAZORPAY_WEBHOOK_SECRET` | the secret you set on the webhook | For payments |
 | `TRIAL_DAYS` | `30` | Optional |
+| `TRIAL_MAX_ACTIVE_EVENTS` | `1` | Optional: active events allowed during the free trial |
 | `SENTRY_DSN`, `SENTRY_ENVIRONMENT` | from Sentry; `staging` or `production` | Recommended |
 | `DJANGO_HSTS_SECONDS` | `3600` at first, `31536000` once HTTPS is stable | Optional |
 | `NUM_PROXIES` | `1` (proxies in front of the app) | Yes; wrong values break rate limits |

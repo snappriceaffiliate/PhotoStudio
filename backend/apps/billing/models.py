@@ -46,8 +46,16 @@ class Limits:
     custom_branding: bool = True
 
 
-# The trial includes branding so studios can see their galleries as clients will.
-TRIAL_LIMITS = Limits("Free trial", max_active_events=1, max_photos_per_event=5000, max_staff=2)
+def trial_limits() -> Limits:
+    """The trial includes branding so studios can see their galleries as clients will.
+    The number of active events is a setting (TRIAL_MAX_ACTIVE_EVENTS) so it can be raised
+    for testing without a release."""
+    return Limits(
+        "Free trial",
+        max_active_events=settings.TRIAL_MAX_ACTIVE_EVENTS,
+        max_photos_per_event=5000,
+        max_staff=2,
+    )
 
 
 @dataclass(frozen=True)
@@ -109,7 +117,7 @@ class Subscription(TenantModel):
     @property
     def limits(self) -> Limits:
         if self.status == self.Status.TRIALING or self.plan is None:
-            return TRIAL_LIMITS
+            return trial_limits()
         p = self.plan
         return Limits(
             p.name, p.max_active_events, p.max_photos_per_event, p.max_staff, p.custom_branding
