@@ -18,10 +18,10 @@ describe('studio profile', () => {
       'GET /api/v1/studio/profile': stored,
       'PATCH /api/v1/studio/profile': (call: { body: unknown }) => ({ ...(call.body as object), phone: '919876543210', website: 'https://lens.in' }),
     });
-    renderApp('/profile');
-    expect(await screen.findByRole('heading', { name: 'Profile' })).toBeTruthy();
+    renderApp('/settings/profile');
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeTruthy();
     await waitFor(() => expect((screen.getByLabelText('WhatsApp number') as HTMLInputElement).value).toBe('+91 98765 43210'));
-    expect(screen.getByRole('link', { name: 'Profile' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Settings' })).toBeTruthy();
 
     typeInto('Studio name', 'Lens & Light Studio');
     typeInto('Website', 'lens.in');
@@ -40,7 +40,7 @@ describe('studio profile', () => {
       'GET /api/v1/studio/profile': stored,
       'PATCH /api/v1/studio/profile': reply(400, { phone: ['Enter a 10-digit Indian mobile number.'] }),
     });
-    renderApp('/profile');
+    renderApp('/settings/profile');
     await screen.findByDisplayValue('Chennai');
     typeInto('WhatsApp number', '123');
     press('Save studio profile');
@@ -49,7 +49,7 @@ describe('studio profile', () => {
 
   it('staff can see the details but not change them', async () => {
     mockApi({ ...session(staff).routes, 'GET /api/v1/studio/profile': stored });
-    renderApp('/profile');
+    renderApp('/settings/profile');
     expect(await screen.findByText('Only the studio owner can change these details.')).toBeTruthy();
     expect(screen.getByLabelText('Studio name').matches(':disabled')).toBe(true);
     expect(screen.queryByRole('button', { name: 'Save studio profile' })).toBeNull();
@@ -59,7 +59,7 @@ describe('studio profile', () => {
 describe('your account', () => {
   it('saves your name', async () => {
     const calls = mockApi({ ...session(owner).routes, 'GET /api/v1/studio/profile': stored, 'PATCH /api/v1/auth/account': { user: owner } });
-    renderApp('/profile');
+    renderApp('/settings/profile');
     await screen.findByDisplayValue('Owner One');
     typeInto('Your name', 'Priya R');
     press('Save name');
@@ -75,7 +75,7 @@ describe('your account', () => {
       'POST /api/v1/auth/password-change': () =>
         ++attempts === 1 ? reply(400, { current_password: ['This is not your current password.'] }) : { detail: 'Password changed.' },
     });
-    renderApp('/profile');
+    renderApp('/settings/profile');
     await screen.findByRole('heading', { name: 'Change password' });
     typeInto('Current password', 'wrong');
     typeInto('New password', 'a-new-strong-pass-77');
@@ -85,5 +85,28 @@ describe('your account', () => {
     press('Change password');
     expect(await screen.findByText(/Password changed/)).toBeTruthy();
     expect((screen.getByLabelText('New password') as HTMLInputElement).value).toBe('');
+  });
+});
+
+describe('settings tabs', () => {
+  it('owners get Profile and a Premium Theme tab; old addresses still work', async () => {
+    mockApi({
+      ...session(owner).routes,
+      'GET /api/v1/studio/profile': stored,
+      'GET /api/v1/studio/branding': { studio_name: 'Lens and Light', logo_url: null, accent_color: null, allowed: true },
+    });
+    renderApp('/branding');
+    const tabs = await screen.findByRole('navigation', { name: 'Settings' });
+    expect(tabs.textContent).toContain('Profile');
+    expect(tabs.textContent).toContain('Premium');
+    expect(await screen.findByRole('heading', { name: 'Theme colour' })).toBeTruthy();
+  });
+
+  it('staff see only the Profile tab', async () => {
+    mockApi({ ...session(staff).routes, 'GET /api/v1/studio/profile': stored });
+    renderApp('/settings');
+    const tabs = await screen.findByRole('navigation', { name: 'Settings' });
+    expect(tabs.textContent).not.toContain('Theme');
+    expect(await screen.findByRole('heading', { name: 'Studio profile' })).toBeTruthy();
   });
 });

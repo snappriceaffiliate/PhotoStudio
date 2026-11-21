@@ -4,10 +4,11 @@ import { AuthLayout, GuestOnly, Loading, StudioLayout } from './components/Layou
 import { ForgotPasswordPage, LoginPage, ResetPasswordPage, SignupPage, VerifyEmailPage } from './pages/AuthPages';
 import { ClientLoginPage, GalleryPage } from './gallery/GalleryPages';
 import { BillingPage } from './pages/BillingPage';
-import { BrandingPage } from './pages/BrandingPage';
 import { EventPage } from './pages/EventPage';
 import { EventPhotosPage } from './pages/EventPhotosPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { SettingsPage } from './pages/SettingsPage';
+import { ThemePage } from './pages/ThemePage';
 import { EventsPage, StaffPage } from './pages/StudioPages';
 
 // The Sprint 0 spike page is only bundled into development builds.
@@ -29,9 +30,15 @@ export default function App() {
         <Route path="/events/:eventId" element={<EventPage />} />
         <Route path="/events/:eventId/photos" element={<EventPhotosPage />} />
         <Route path="/staff" element={<StaffPage />} />
-        <Route path="/branding" element={<BrandingPage />} />
         <Route path="/billing" element={<BillingPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/settings" element={<SettingsPage />}>
+          <Route index element={<Navigate to="profile" replace />} />
+          <Route path="profile" element={<ProfilePage />} />
+          <Route path="theme" element={<ThemePage />} />
+        </Route>
+        {/* Older addresses */}
+        <Route path="/profile" element={<Navigate to="/settings/profile" replace />} />
+        <Route path="/branding" element={<Navigate to="/settings/theme" replace />} />
       </Route>
       {SpikePage && (
         <Route path="/dev/spikes" element={<Suspense fallback={<Loading />}><SpikePage /></Suspense>} />

@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from './auth/AuthContext';
 import { ClientLoginPage, GalleryPage } from './gallery/GalleryPages';
 import { BillingPage } from './pages/BillingPage';
-import { BrandingPage } from './pages/BrandingPage';
+import { ThemePage } from './pages/ThemePage';
 import { ForgotPasswordPage, LoginPage, ResetPasswordPage, SignupPage } from './pages/AuthPages';
 import { EventsPage } from './pages/StudioPages';
 
@@ -106,7 +106,7 @@ describe('accessibility', () => {
   });
 
   it('branding screen has no violations', async () => {
-    const { container } = page(<BrandingPage />);
+    const { container } = page(<ThemePage />);
     await screen.findByText('What clients see');
     expect(await violations(container)).toEqual([]);
   });
