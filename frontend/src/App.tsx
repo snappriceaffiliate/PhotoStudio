@@ -7,6 +7,7 @@ import { BillingPage } from './pages/BillingPage';
 import { EventPage } from './pages/EventPage';
 import { EventPhotosPage } from './pages/EventPhotosPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { RemindersPage } from './pages/RemindersPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ThemePage } from './pages/ThemePage';
 import { EventsPage, StaffPage } from './pages/StudioPages';
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/events/:eventId" element={<EventPage />} />
         <Route path="/events/:eventId/photos" element={<EventPhotosPage />} />
         <Route path="/staff" element={<StaffPage />} />
+        <Route path="/reminders" element={<RemindersPage />} />
         <Route path="/billing" element={<BillingPage />} />
         <Route path="/settings" element={<SettingsPage />}>
           <Route index element={<Navigate to="profile" replace />} />

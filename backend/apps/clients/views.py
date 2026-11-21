@@ -29,6 +29,7 @@ from apps.photos.models import Photo
 from apps.studios.views import client_branding, studio_contact
 
 from . import access as client_access
+from . import reminders
 from .models import ClientAccess, Selection, Submission
 
 PAGE_SIZE_MAX = 200
@@ -607,3 +608,62 @@ class EventArchiveView(APIView):
             event.save(update_fields=["status", "archived_at", "updated_at"])
             record(request, "event.unarchived", event)
         return Response({"status": event.status, "archived_at": event.archived_at})
+
+
+# ---- Reminders --------------------------------------------------------------------------
+
+
+class RemindersView(APIView):
+    """GET: clients who have not submitted and are due a reminder (see reminders.py)."""
+
+    permission_classes = [IsStudioMember]
+
+    def get(self, request):
+        from django.db.models import Count
+
+        due = reminders.due_reminders(ClientAccess.objects.for_studio(request.studio_id))
+        event_ids = {d.access.event_id for d in due}
+        chosen = dict(
+            Selection.objects.for_studio(request.studio_id)
+            .filter(event_id__in=event_ids)
+            .values("event_id")
+            .annotate(n=Count("id"))
+            .values_list("event_id", "n")
+        )
+        results = [
+            {
+                "id": str(d.access.pk),
+                "client_name": d.access.client_name,
+                "phone": d.access.phone,
+                "username": d.access.username,
+                "reason": d.reason,
+                "shared_at": d.access.created_at,
+                "reminder_count": d.access.reminder_count,
+                "last_reminded_at": d.access.last_reminded_at,
+                "selected": chosen.get(d.access.event_id, 0),
+                "event": {
+                    "id": str(d.access.event_id),
+                    "title": d.access.event.title,
+                    "selection_limit": d.access.event.selection_limit,
+                    "expires_at": d.access.event.expires_at,
+                },
+            }
+            for d in due
+        ]
+        return Response(
+            {"count": len(results), "max_reminders": reminders.MAX_REMINDERS, "results": results}
+        )
+
+
+class ReminderSentView(APIView):
+    """POST: the studio sent (or chose to skip) this client's reminder."""
+
+    permission_classes = [IsStudioMember]
+
+    def post(self, request, pk):
+        access = get_object_or_404(ClientAccess.objects.for_studio(request.studio_id), pk=pk)
+        reminders.mark_sent(access)
+        record(request, "client.reminded", event=access.event, detail=access.client_name)
+        return Response(
+            {"reminder_count": access.reminder_count, "last_reminded_at": access.last_reminded_at}
+        )

@@ -70,3 +70,25 @@ def selection_submitted_email(to: str, event, count: int, client_name: str) -> N
         f"{client_name} selected {count} photos from {event.title} and submitted the selection.\n\n"
         f"See it here: {link}",
     )
+
+
+def reminders_due_email(owner, items) -> None:
+    """Tell a studio owner which clients have not chosen their photos yet."""
+    from django.utils import timezone
+
+    now = timezone.now()
+    lines = []
+    for item in items:
+        a = item.access
+        days = (now - a.created_at).days
+        why = "gallery closes tomorrow" if item.reason == "expiring" else f"shared {days} days ago"
+        lines.append(f"- {a.client_name}, {a.event.title}: {why}")
+    count = len(items)
+    noun = "client has" if count == 1 else "clients have"
+    _queue(
+        owner.email,
+        f"{count} {noun} not chosen their photos yet",
+        f"Hello {owner.full_name},\n\n{count} {noun} not submitted a selection yet:\n\n"
+        + "\n".join(lines)
+        + f"\n\nSend each a reminder on WhatsApp in one tap: {settings.APP_URL}/reminders",
+    )
