@@ -9,6 +9,7 @@ import { brandStyle, type StudioBranding } from '../branding/brand';
 interface GalleryInfo {
   client_name: string;
   studio_name: string;
+  studio_contact?: StudioContact | null;
   event: { title: string; selection_limit: number | null; expires_at: string | null; submitted_at: string | null };
   photo_count: number;
   selected: number;
@@ -62,6 +63,30 @@ function StudioMark({ info }: { info: GalleryInfo }) {
     return <img className="studio-logo" src={info.branding.logo_url} alt={info.studio_name} />;
   }
   return <p className="brand">{info.studio_name}</p>;
+}
+
+interface StudioContact {
+  phone: string | null;
+  email: string | null;
+  city: string | null;
+  website: string | null;
+  instagram: string | null;
+}
+
+/** How to reach the studio, from its profile; nothing when the studio added no details. */
+function StudioContactLinks({ name, contact }: { name: string; contact?: StudioContact | null }) {
+  if (!contact) return null;
+  return (
+    <ul className="gallery-contact" aria-label={`Contact ${name}`}>
+      {contact.phone && <li><a href={`https://wa.me/${contact.phone}`} target="_blank" rel="noopener noreferrer">WhatsApp</a></li>}
+      {contact.email && <li><a href={`mailto:${contact.email}`}>{contact.email}</a></li>}
+      {contact.instagram && (
+        <li><a href={`https://instagram.com/${contact.instagram}`} target="_blank" rel="noopener noreferrer">@{contact.instagram}</a></li>
+      )}
+      {contact.website && <li><a href={contact.website} target="_blank" rel="noopener noreferrer">{contact.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}</a></li>}
+      {contact.city && <li className="muted">{contact.city}</li>}
+    </ul>
+  );
 }
 
 export function GalleryPage() {
@@ -268,6 +293,7 @@ export function GalleryPage() {
         ))}
       </ul>
       <div ref={sentinel} />
+      <StudioContactLinks name={info.studio_name} contact={info.studio_contact} />
       <p className="gallery-foot">
         Gallery by {info.studio_name} · made with <a href="/" rel="noopener">{BRAND_NAME}</a>
       </p>

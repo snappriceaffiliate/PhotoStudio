@@ -35,7 +35,11 @@ export function StudioLayout() {
     return (
       <AuthLayout title="No studio on this account">
         <p>This account is a platform admin account. Use the Django admin site instead.</p>
-        <a className="button" href="/admin/">Open admin</a>
+        <p className="muted">To use PickSnap as a studio, log out and create a studio account with a different email.</p>
+        <div className="actions">
+          <a className="button" href="/admin/">Open admin</a>
+          <button type="button" className="secondary" onClick={async () => { await logout(); navigate('/login'); }}>Log out</button>
+        </div>
       </AuthLayout>
     );
   }
@@ -56,6 +60,7 @@ export function StudioLayout() {
             {user.role === 'owner' && <NavLink to="/staff">Staff</NavLink>}
             {user.role === 'owner' && <NavLink to="/branding">Branding</NavLink>}
             <NavLink to="/billing">Billing</NavLink>
+            <NavLink to="/profile">Profile</NavLink>
           </nav>
           <div className="account">
             <span className="account-name">{user.full_name}</span>

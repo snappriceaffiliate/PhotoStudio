@@ -217,6 +217,15 @@ describe('the studio top bar', () => {
     expect(screen.getByRole('link', { name: 'Open admin' }).getAttribute('href')).toBe('/admin/');
   });
 
+  it('platform admins can log out from that screen', async () => {
+    const calls = mockApi({ ...session({ ...owner, studio: null, role: 'owner' }).routes, ...events });
+    renderApp('/events');
+    await screen.findByText(/platform admin account/);
+    press('Log out');
+    expect(await screen.findByRole('heading', { name: 'Log in to your studio' })).toBeTruthy();
+    expect(callsTo(calls, 'POST', '/api/v1/auth/logout')).toHaveLength(1);
+  });
+
   it('asks unverified users to confirm their email and can resend the link', async () => {
     const calls = mockApi({
       ...session({ ...owner, email_verified: false }).routes, ...events,

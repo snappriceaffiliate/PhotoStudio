@@ -26,7 +26,7 @@ from apps.core.validators import single_line, whatsapp_number
 from apps.events.models import Album, Event
 from apps.notifications import emails
 from apps.photos.models import Photo
-from apps.studios.views import client_branding
+from apps.studios.views import client_branding, studio_contact
 
 from . import access as client_access
 from .models import ClientAccess, Selection, Submission
@@ -300,6 +300,7 @@ class ClientMeView(ClientView):
                 },
                 "cover_url": _cover_url(event),
                 "branding": client_branding(request.client.studio),
+                "studio_contact": studio_contact(request.client.studio),
                 "photo_count": Photo.objects.for_studio(event.studio_id)
                 .filter(event=event, status=Photo.Status.READY)
                 .count(),

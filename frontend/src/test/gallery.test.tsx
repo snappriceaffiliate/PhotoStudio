@@ -91,6 +91,25 @@ describe('gallery login', () => {
   });
 });
 
+describe('studio contact', () => {
+  it('shows how to reach the studio when it filled in its profile', async () => {
+    gallery({ studio_contact: { phone: '919876543210', email: null, city: 'Chennai', website: 'https://lens.in', instagram: 'lens' } });
+    renderApp('/gallery');
+    const list = await screen.findByRole('list', { name: 'Contact Lens and Light' });
+    expect(within(list).getByRole('link', { name: 'WhatsApp' }).getAttribute('href')).toBe('https://wa.me/919876543210');
+    expect(within(list).getByRole('link', { name: '@lens' }).getAttribute('href')).toBe('https://instagram.com/lens');
+    expect(within(list).getByRole('link', { name: 'lens.in' })).toBeTruthy();
+    expect(within(list).getByText('Chennai')).toBeTruthy();
+  });
+
+  it('shows nothing when the studio added no details', async () => {
+    gallery();
+    renderApp('/gallery');
+    await screen.findByRole('heading', { name: 'Wedding' });
+    expect(screen.queryByRole('list', { name: /Contact/ })).toBeNull();
+  });
+});
+
 describe('choosing photos', () => {
   it('shows the studio, the count and what is left', async () => {
     gallery();

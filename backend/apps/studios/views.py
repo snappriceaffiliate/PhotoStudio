@@ -7,15 +7,16 @@ server only checks the size and that the file really is WebP, then stores it.
 import re
 import secrets
 
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.permissions import IsStudioOwner
+from apps.accounts.permissions import IsStudioMember, IsStudioOwner
 from apps.audit.models import record
 from apps.billing import entitlements
 from apps.core import storage
+from apps.core.validators import single_line, whatsapp_number
 
 from .models import Studio
 
@@ -125,3 +126,90 @@ class BrandingLogoView(APIView):
             studio.save(update_fields=["logo_key", "updated_at"])
             record(request, "studio.branding_logo", detail="removed")
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---- Studio profile -------------------------------------------------------------------
+
+PROFILE_FIELDS = ["name", "phone", "contact_email", "address", "city", "website", "instagram"]
+INSTAGRAM_HANDLE = re.compile(r"^[A-Za-z0-9._]{1,30}$")
+
+
+class ProfileSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(max_length=200, validators=[single_line])
+    phone = serializers.CharField(max_length=30, allow_blank=True, required=False)
+    address = serializers.CharField(
+        max_length=300, allow_blank=True, required=False, validators=[single_line]
+    )
+    city = serializers.CharField(
+        max_length=100, allow_blank=True, required=False, validators=[single_line]
+    )
+    website = serializers.CharField(max_length=200, allow_blank=True, required=False)
+    instagram = serializers.CharField(max_length=60, allow_blank=True, required=False)
+
+    class Meta:
+        model = Studio
+        fields = PROFILE_FIELDS
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Enter the studio's name.")
+        return value
+
+    def validate_phone(self, value):
+        return whatsapp_number(value) if value.strip() else ""
+
+    def validate_website(self, value):
+        value = value.strip()
+        if not value:
+            return ""
+        if not re.match(r"^https?://", value, re.I):
+            value = f"https://{value}"
+        serializers.URLField().run_validation(value)
+        return value
+
+    def validate_instagram(self, value):
+        value = value.strip()
+        # Accept @handle or a profile link and keep the bare handle.
+        value = re.sub(r"^(https?://)?(www\.)?instagram\.com/", "", value, flags=re.I)
+        value = value.strip("/").lstrip("@")
+        if value and not INSTAGRAM_HANDLE.match(value):
+            raise serializers.ValidationError(
+                "Enter the Instagram handle, for example lensandlight."
+            )
+        return value
+
+
+def studio_contact(studio: Studio) -> dict | None:
+    """The contact details a client gallery shows, or None when the studio added none."""
+    contact = {
+        "phone": studio.phone or None,
+        "email": studio.contact_email or None,
+        "city": studio.city or None,
+        "website": studio.website or None,
+        "instagram": studio.instagram or None,
+    }
+    return contact if any(contact.values()) else None
+
+
+class StudioProfileView(APIView):
+    """GET the studio profile (owner and staff). PATCH it (owner only)."""
+
+    permission_classes = [IsStudioMember]
+
+    def get(self, request):
+        return Response(ProfileSerializer(Studio.objects.get(pk=request.studio_id)).data)
+
+    def patch(self, request):
+        if not request.user.is_owner:
+            return Response(
+                {"detail": "Only the studio owner can change the studio profile."}, status=403
+            )
+        studio = Studio.objects.get(pk=request.studio_id)
+        data = ProfileSerializer(studio, data=request.data, partial=True)
+        data.is_valid(raise_exception=True)
+        changed = [f for f, v in data.validated_data.items() if getattr(studio, f) != v]
+        data.save()
+        if changed:
+            record(request, "studio.profile", detail=", ".join(changed))
+        return Response(data.data)
