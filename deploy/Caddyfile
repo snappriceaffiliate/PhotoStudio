@@ -1,6 +1,12 @@
 # Caddy obtains and renews the HTTPS certificate for the domain by itself.
 # Port 80 must be open to the internet for the first certificate.
 {$DOMAIN} {
+	# DOMAIN may list extra names (www, an old address). They send visitors to the main
+	# address, keeping the path, so links already shared keep working and new links,
+	# which the app builds from the address in the browser, always use the main one.
+	@elsewhere not host {$PRIMARY_HOST}
+	redir @elsewhere https://{$PRIMARY_HOST}{uri} permanent
+
 	encode zstd gzip
 
 	# The app sets its own security headers (HSTS, framing, content type); Caddy adds the
