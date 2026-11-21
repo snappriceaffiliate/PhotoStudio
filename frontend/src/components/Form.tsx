@@ -39,6 +39,7 @@ export function useSubmit<T>(handler: () => Promise<T>) {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+    const form = event.currentTarget instanceof HTMLFormElement ? event.currentTarget : null;
     setBusy(true);
     setError('');
     setFields({});
@@ -49,7 +50,15 @@ export function useSubmit<T>(handler: () => Promise<T>) {
         setFields(err.fields);
         // Errors not tied to one input (or none at all) go in the message above the form.
         const general = !Object.keys(err.fields).length || 'non_field_errors' in err.fields || err.status === 429;
-        if (general) setError(err.message);
+        // Errors for a box this form does not have would otherwise show nowhere; this happens
+        // when the page was opened before an update added the box.
+        const unshown = form
+          ? Object.keys(err.fields).filter((key) => key !== 'non_field_errors' && !form.elements.namedItem(key))
+          : [];
+        if (unshown.length) {
+          const messages = unshown.flatMap((key) => err.fields[key]).join(' ');
+          setError(`${messages} If you don't see a box for this, reload the page and try again.`);
+        } else if (general) setError(err.message);
       } else {
         setError('Something went wrong. Check your connection and try again.');
       }

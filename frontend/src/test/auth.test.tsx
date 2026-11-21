@@ -122,6 +122,16 @@ describe('signing up', () => {
     });
   });
 
+  it('shows errors for boxes the page does not have, so an old page never fails silently', async () => {
+    const s = session();
+    mockApi({ ...s.routes, 'POST /api/v1/auth/signup': reply(400, { referral_code: ['Enter a referral code.'] }) });
+    renderApp('/signup');
+    await screen.findByRole('heading', { name: 'Create your studio account' });
+    press('Create account');
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe("Enter a referral code. If you don't see a box for this, reload the page and try again.");
+  });
+
   it('catches a mistyped password before sending', async () => {
     const s = session();
     const calls = mockApi({ ...s.routes });
