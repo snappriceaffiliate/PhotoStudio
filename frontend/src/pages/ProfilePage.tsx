@@ -23,7 +23,7 @@ function showPhone(digits: string): string {
   return `+${digits}`;
 }
 
-/** The studio's details and the logged-in person's own account. */
+/** Settings › Profile: the studio's details and the logged-in person's own account. */
 export function ProfilePage() {
   const { user, refresh } = useAuth();
   const isOwner = user?.role === 'owner';
@@ -38,12 +38,7 @@ export function ProfilePage() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1>Profile</h1>
-          <p className="muted">Your studio’s details, and your own name and password.</p>
-        </div>
-      </div>
+      <p className="muted settings-intro">Your studio’s details, and your own name and password.</p>
       <FormMessage error={loadError} />
       {profile && <StudioForm initial={profile} editable={isOwner} onSaved={refresh} />}
       {user && <AccountForm user={user} onSaved={refresh} />}

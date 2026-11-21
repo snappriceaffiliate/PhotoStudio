@@ -28,7 +28,8 @@ const SWATCHES = [
   { name: 'Charcoal', hex: '#333333' },
 ];
 
-export function BrandingPage() {
+/** Settings › Theme: the logo and colour clients see in their galleries (Studio and Pro plans). */
+export function ThemePage() {
   const { user } = useAuth();
   const [branding, setBranding] = useState<Branding | null>(null);
   const [colour, setColour] = useState(DEFAULT_ACCENT);
@@ -46,7 +47,7 @@ export function BrandingPage() {
       .catch((e: Error) => setError(e.message));
   }, []);
 
-  if (user?.role !== 'owner') return <FormMessage error="Only the studio owner can change branding." />;
+  if (user?.role !== 'owner') return <FormMessage error="Only the studio owner can change the theme." />;
   if (!branding) return error ? <FormMessage error={error} /> : <Loading />;
 
   const valid = isHexColour(colour);
@@ -92,16 +93,14 @@ export function BrandingPage() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1>Branding</h1>
-          <p className="muted">Your logo and colour in every client gallery, so clients see your studio, not ours.</p>
-        </div>
-      </div>
+      <p className="muted settings-intro">
+        Your logo and colour in every client gallery, so clients see your studio, not ours.
+        Included with the Studio and Pro plans.
+      </p>
 
       {locked && (
         <div className="banner warn" role="status">
-          Your plan does not include studio branding. <Link to="/billing">Choose a bigger plan</Link> to turn it on.
+          Your plan does not include a custom theme and logo. <Link to="/billing">Choose the Studio or Pro plan</Link> to turn it on.
         </div>
       )}
       <FormMessage error={error} success={notice} />
@@ -126,7 +125,7 @@ export function BrandingPage() {
           </section>
 
           <section className="panel">
-            <h2>Accent colour</h2>
+            <h2>Theme colour</h2>
             <p className="muted">Used for buttons and links in your galleries. Hearts stay marigold so choosing always looks the same.</p>
             <div className="swatches" role="group" aria-label="Suggested colours">
               {SWATCHES.map((s) => (

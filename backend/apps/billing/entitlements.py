@@ -76,7 +76,8 @@ def require_branding(studio_id) -> Subscription:
     sub = require_can_work(studio_id)
     if not sub.limits.custom_branding:
         raise BillingBlocked(
-            f"Your {sub.limits.name} plan does not include studio branding. Choose a bigger plan."
+            f"Your {sub.limits.name} plan does not include a custom theme and logo. "
+            "Choose the Studio or Pro plan."
         )
     return sub
 

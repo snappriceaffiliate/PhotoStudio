@@ -36,6 +36,7 @@ def _plan_data(plan: Plan) -> dict:
         "max_active_events": plan.max_active_events,
         "max_photos_per_event": plan.max_photos_per_event,
         "max_staff": plan.max_staff,
+        "custom_theme": plan.custom_branding,
         "available": bool(plan.razorpay_plan_id) and razorpay.configured(),
     }
 

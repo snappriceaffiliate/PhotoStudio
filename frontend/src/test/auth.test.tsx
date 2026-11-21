@@ -185,11 +185,12 @@ describe('email confirmation', () => {
 });
 
 describe('the studio top bar', () => {
-  it('owners see Staff and Branding; staff do not', async () => {
+  it('owners see Staff; everyone sees Settings', async () => {
     mockApi({ ...session(owner).routes, ...events });
     const first = renderApp('/events');
     const nav = await screen.findByRole('navigation', { name: 'Main' });
-    expect(['Events', 'Staff', 'Branding', 'Billing'].every((n) => nav.textContent?.includes(n))).toBe(true);
+    expect(['Events', 'Staff', 'Billing', 'Settings'].every((n) => nav.textContent?.includes(n))).toBe(true);
+    expect(nav.textContent).not.toContain('Branding');
     first.unmount();
 
     mockApi({ ...session(staff).routes, ...events });
@@ -197,7 +198,7 @@ describe('the studio top bar', () => {
     const staffNav = await screen.findByRole('navigation', { name: 'Main' });
     expect(staffNav.textContent).toContain('Billing');
     expect(staffNav.textContent).not.toContain('Staff');
-    expect(staffNav.textContent).not.toContain('Branding');
+    expect(staffNav.textContent).toContain('Settings');
   });
 
   it('logging out returns to the login screen', async () => {

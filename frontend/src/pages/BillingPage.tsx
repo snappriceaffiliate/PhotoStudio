@@ -11,6 +11,7 @@ interface PlanInfo {
   max_active_events: number | null;
   max_photos_per_event: number;
   max_staff: number;
+  custom_theme?: boolean;
   available: boolean;
 }
 
@@ -173,6 +174,7 @@ export function BillingPage() {
                 <li>{p.max_active_events === null ? 'Unlimited active events' : `${p.max_active_events} active events`}</li>
                 <li>Up to {p.max_photos_per_event.toLocaleString('en-IN')} photos per event</li>
                 <li>{p.max_staff} {p.max_staff === 1 ? 'person' : 'people'}</li>
+                {p.custom_theme && <li>Your own theme and logo in client galleries</li>}
               </ul>
               {current ? (
                 <span className="status status-shared">Current plan</span>

@@ -1,11 +1,13 @@
 """Studio branding: logo and accent colour, who may change them, and what clients see."""
 
+from datetime import timedelta
+
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 
 from apps.accounts.models import User
-from apps.billing.models import Plan
+from apps.billing.models import Plan, Subscription
 from apps.core import storage, tenancy
 from apps.studios.models import Studio
 from apps.studios.views import contrast_with_white
@@ -115,3 +117,27 @@ def test_plan_without_branding_is_refused_and_hidden_from_clients(shared, api):
 
 def test_client_sees_no_branding_when_none_set(shared):
     assert shared["guest"].json("get", "/api/v1/client/me").json()["branding"] is None
+
+
+def test_theme_is_for_studio_and_pro_plans_not_starter(api, make_studio):
+    assert {p.code: p.custom_branding for p in Plan.objects.all()} == {
+        "starter": False,
+        "studio": True,
+        "pro": True,
+    }
+    studio, owner = make_studio("lens")
+    api.json("post", "/api/v1/auth/login", {"email": owner.email, "password": PASSWORD})
+    plans = {
+        p["code"]: p["custom_theme"] for p in api.json("get", "/api/v1/billing").json()["plans"]
+    }
+    assert plans == {"starter": False, "studio": True, "pro": True}
+    # A studio on Starter is told which plans include it.
+    with tenancy.bypass_rls():
+        Subscription.objects.filter(studio=studio).update(
+            status=Subscription.Status.ACTIVE,
+            plan=Plan.objects.get(code="starter"),
+            current_period_end=timezone.now() + timedelta(days=20),
+        )
+    refused = api.json("patch", "/api/v1/studio/branding", {"accent_color": "#8A1C3B"})
+    assert refused.status_code == 402
+    assert "Studio or Pro" in refused.json()["detail"]

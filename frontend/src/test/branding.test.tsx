@@ -25,8 +25,8 @@ const saveButton = () => screen.getByRole('button', { name: 'Save colour' }) as 
 describe('accent colour', () => {
   it('starts with the PickSnap black and nothing to save', async () => {
     mockApi(routes().routes);
-    renderApp('/branding');
-    expect(await screen.findByRole('heading', { name: 'Branding' })).toBeTruthy();
+    renderApp('/settings/theme');
+    expect(await screen.findByRole('heading', { name: 'Theme colour' })).toBeTruthy();
     expect((screen.getByLabelText('Colour code') as HTMLInputElement).value).toBe('#1C1A17');
     expect(saveButton().disabled).toBe(true);
     expect(screen.getByText(/Readable on white/)).toBeTruthy();
@@ -37,8 +37,8 @@ describe('accent colour', () => {
       'PATCH /api/v1/studio/branding': (call: { body: { accent_color: string } }) => ({ ...base, accent_color: call.body.accent_color }),
     });
     const calls = mockApi(r.routes);
-    renderApp('/branding');
-    await screen.findByRole('heading', { name: 'Branding' });
+    renderApp('/settings/theme');
+    await screen.findByRole('heading', { name: 'Theme colour' });
     fireEvent.click(screen.getByRole('button', { name: 'Maroon' }));
     expect((screen.getByLabelText('Colour code') as HTMLInputElement).value).toBe('#8A1C3B');
     expect(screen.getByRole('button', { name: 'Maroon' }).getAttribute('aria-pressed')).toBe('true');
@@ -50,8 +50,8 @@ describe('accent colour', () => {
 
   it('refuses a colour that is too light, with its contrast, and will not send it', async () => {
     const calls = mockApi(routes().routes);
-    renderApp('/branding');
-    await screen.findByRole('heading', { name: 'Branding' });
+    renderApp('/settings/theme');
+    await screen.findByRole('heading', { name: 'Theme colour' });
     typeInto('Colour code', '#FFD700');
     expect(saveButton().disabled).toBe(true);
     expect(screen.getByText(/Too light for text on white/).textContent).toContain('needs 4.5');
@@ -61,8 +61,8 @@ describe('accent colour', () => {
 
   it('refuses something that is not a colour code', async () => {
     mockApi(routes().routes);
-    renderApp('/branding');
-    await screen.findByRole('heading', { name: 'Branding' });
+    renderApp('/settings/theme');
+    await screen.findByRole('heading', { name: 'Theme colour' });
     typeInto('Colour code', 'maroon');
     expect(saveButton().disabled).toBe(true);
     expect(screen.getByText('Use a colour code like #8A1C3B.')).toBeTruthy();
@@ -73,8 +73,8 @@ describe('accent colour', () => {
       'PATCH /api/v1/studio/branding': () => ({ ...base, accent_color: null }),
     });
     const calls = mockApi(r.routes);
-    renderApp('/branding');
-    await screen.findByRole('heading', { name: 'Branding' });
+    renderApp('/settings/theme');
+    await screen.findByRole('heading', { name: 'Theme colour' });
     expect((screen.getByLabelText('Colour code') as HTMLInputElement).value).toBe('#8A1C3B');
     press(/Reset to PickSnap black/);
     expect((await screen.findByRole('status')).textContent).toBe('Colour reset to PickSnap black.');
@@ -86,8 +86,8 @@ describe('accent colour', () => {
     mockApi(routes({}, {
       'PATCH /api/v1/studio/branding': reply(400, { accent_color: ['This colour is too light for text on white. Pick a darker shade.'] }),
     }).routes);
-    renderApp('/branding');
-    await screen.findByRole('heading', { name: 'Branding' });
+    renderApp('/settings/theme');
+    await screen.findByRole('heading', { name: 'Theme colour' });
     fireEvent.click(screen.getByRole('button', { name: 'Navy' }));
     fireEvent.click(saveButton());
     expect((await screen.findByRole('alert')).textContent).toContain('too light');
@@ -97,7 +97,7 @@ describe('accent colour', () => {
 describe('logo', () => {
   it('shows the current logo with a way to remove it', async () => {
     mockApi(routes({ logo_url: 'data:image/webp;base64,AAAA' }).routes);
-    renderApp('/branding');
+    renderApp('/settings/theme');
     const logos = await screen.findAllByAltText('Lens and Light logo');
     expect(logos).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Change logo' })).toBeTruthy();
@@ -107,7 +107,7 @@ describe('logo', () => {
   it('removes the logo', async () => {
     const r = routes({ logo_url: 'data:image/webp;base64,AAAA' }, { 'DELETE /api/v1/studio/branding/logo': reply(204) });
     const calls = mockApi(r.routes);
-    renderApp('/branding');
+    renderApp('/settings/theme');
     await screen.findByAltText('Lens and Light logo');
     press('Remove');
     expect((await screen.findByRole('status')).textContent).toBe('Logo removed.');
@@ -118,8 +118,8 @@ describe('logo', () => {
 
   it('says so when the chosen file is not an image', async () => {
     mockApi(routes().routes);
-    renderApp('/branding');
-    await screen.findByRole('heading', { name: 'Branding' });
+    renderApp('/settings/theme');
+    await screen.findByRole('heading', { name: 'Theme colour' });
     // jsdom cannot decode images, so any file fails the same way a bad file would in a browser.
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [new File(['not an image'], 'logo.png', { type: 'image/png' })] } });
@@ -130,9 +130,9 @@ describe('logo', () => {
 describe('who can use it', () => {
   it('is locked, with a way to upgrade, when the plan has no branding', async () => {
     mockApi(routes({ allowed: false }).routes);
-    renderApp('/branding');
-    expect(await screen.findByText(/does not include studio branding/)).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Choose a bigger plan' }).getAttribute('href')).toBe('/billing');
+    renderApp('/settings/theme');
+    expect(await screen.findByText(/does not include a custom theme and logo/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Choose the Studio or Pro plan' }).getAttribute('href')).toBe('/billing');
     expect((screen.getByRole('button', { name: 'Upload logo' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByLabelText('Colour code') as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByRole('button', { name: 'Maroon' }) as HTMLButtonElement).disabled).toBe(true);
@@ -140,13 +140,13 @@ describe('who can use it', () => {
 
   it('is for the owner only', async () => {
     mockApi(routes({}, {}, staff as typeof owner).routes);
-    renderApp('/branding');
-    expect((await screen.findByRole('alert')).textContent).toBe('Only the studio owner can change branding.');
+    renderApp('/settings/theme');
+    expect((await screen.findByRole('alert')).textContent).toBe('Only the studio owner can change the theme.');
   });
 
   it('shows the preview in the chosen colour using the studio name when there is no logo', async () => {
     mockApi(routes({ accent_color: '#8A1C3B' }).routes);
-    renderApp('/branding');
+    renderApp('/settings/theme');
     await screen.findByRole('heading', { name: 'What clients see' });
     const preview = document.querySelector('.brand-preview') as HTMLElement;
     expect(preview.className).toContain('branded');
@@ -157,7 +157,7 @@ describe('who can use it', () => {
 
   it('the preview does not follow a colour that cannot be saved', async () => {
     mockApi(routes({ accent_color: '#8A1C3B' }).routes);
-    renderApp('/branding');
+    renderApp('/settings/theme');
     await screen.findByRole('heading', { name: 'What clients see' });
     typeInto('Colour code', '#FFD700');
     const preview = document.querySelector('.brand-preview') as HTMLElement;
