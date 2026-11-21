@@ -92,7 +92,8 @@ export function BillingPage() {
         name: BRAND_NAME,
         description: `${plan.name} plan for ${start.studio_name}`,
         prefill: start.prefill,
-        theme: { color: '#0e5e5a' },
+        image: new URL(`${import.meta.env.BASE_URL}icon-192.png`, window.location.origin).href,
+        theme: { color: '#3b2f8f' },
         handler: async (response: RazorpayResponse) => {
           try {
             await api('/billing/verify', { method: 'POST', body: response });
