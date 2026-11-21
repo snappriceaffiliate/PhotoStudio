@@ -1,5 +1,11 @@
 from django.conf import settings
-from django.contrib.auth import authenticate, login, logout, password_validation
+from django.contrib.auth import (
+    authenticate,
+    login,
+    logout,
+    password_validation,
+    update_session_auth_hash,
+)
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -9,12 +15,14 @@ from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from apps.audit.models import record
 from apps.billing import entitlements
 from apps.billing.models import Subscription
 from apps.core.tenancy import studio_context
+from apps.core.validators import has_control_chars
 from apps.notifications import emails
 from apps.studios.models import Studio
 
@@ -255,3 +263,53 @@ class StaffDetailView(APIView):
         member.save(update_fields=["is_active"])
         record(request, "staff.removed", detail=member.email, studio_id=request.user.studio_id)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AccountView(APIView):
+    """PATCH {full_name}: the logged-in person's own name."""
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request):
+        name = request.data.get("full_name")
+        name = name.strip() if isinstance(name, str) else ""
+        if not name:
+            return Response({"full_name": ["Enter your name."]}, status=400)
+        if len(name) > 150:
+            return Response({"full_name": ["Use at most 150 characters."]}, status=400)
+        if has_control_chars(name):
+            return Response({"full_name": ["Use plain text on one line."]}, status=400)
+        request.user.full_name = name
+        request.user.save(update_fields=["full_name"])
+        return Response(_me(request.user))
+
+
+class PasswordChangeThrottle(UserRateThrottle):
+    scope = "password_change"
+
+
+class PasswordChangeView(APIView):
+    """POST {current_password, new_password}. Other sessions are signed out; this one stays."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [PasswordChangeThrottle]
+
+    def post(self, request):
+        current = request.data.get("current_password") or ""
+        new = request.data.get("new_password") or ""
+        user = request.user
+        if not isinstance(current, str) or not user.check_password(current):
+            return Response(
+                {"current_password": ["This is not your current password."]}, status=400
+            )
+        if not isinstance(new, str) or not new:
+            return Response({"new_password": ["Enter a new password."]}, status=400)
+        try:
+            password_validation.validate_password(new, user)
+        except DjangoValidationError as exc:
+            return Response({"new_password": exc.messages}, status=400)
+        user.set_password(new)
+        user.save(update_fields=["password"])
+        update_session_auth_hash(request, user)
+        record(request, "account.password_changed")
+        return Response({"detail": "Password changed."})

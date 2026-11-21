@@ -183,6 +183,7 @@ REST_FRAMEWORK = {
             "signup_ip": (10, "hour"),
             "password_reset_account": (5, "hour"),
             "password_reset_ip": (20, "hour"),
+            "password_change": (10, "hour"),
         }.items()
     },
     # Hosting platforms add one proxy hop; the client IP is the last X-Forwarded-For entry.
