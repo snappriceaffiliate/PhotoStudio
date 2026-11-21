@@ -9,6 +9,7 @@ under MAX_IMAGE_BYTES, with the event's watermark.
 
 import io
 import json
+import math
 import re
 import urllib.error
 import urllib.parse
@@ -198,20 +199,35 @@ def _draw(image: Image.Image, long_edge: int, watermark: str) -> Image.Image:
     scaled = image.copy()
     scaled.thumbnail((long_edge, long_edge), Image.Resampling.LANCZOS)
     if watermark:
-        width, height = scaled.size
-        size = max(14, round(width * 0.03))
-        layer = Image.new("RGBA", scaled.size, (0, 0, 0, 0))
-        ImageDraw.Draw(layer).text(
-            (width - size, height - size),
-            watermark,
-            font=_font(size),
-            anchor="rd",
-            fill=(255, 255, 255, 140),
-            stroke_width=max(1, size // 14),
-            stroke_fill=(0, 0, 0, 90),
-        )
-        scaled = Image.alpha_composite(scaled.convert("RGBA"), layer).convert("RGB")
+        scaled = _watermark(scaled, watermark)
     return scaled
+
+
+def _watermark(image: Image.Image, text: str) -> Image.Image:
+    """Large and see-through, across the middle along the diagonal (as the browser draws it),
+    so it cannot be cropped away but the photo can still be judged."""
+    width, height = image.size
+    diagonal = math.hypot(width, height)
+    at_100 = max(1.0, _font(100).getlength(text))
+    size = round(max(16, min(diagonal * 0.7 * 100 / at_100, min(width, height) * 0.2)))
+    font = _font(size)
+    stroke = max(1, round(size / 14))
+    left, top, right, bottom = font.getbbox(text, stroke_width=stroke)
+    band = Image.new("RGBA", (right - left + 4, bottom - top + 4), (0, 0, 0, 0))
+    ImageDraw.Draw(band).text(
+        (2 - left, 2 - top),
+        text,
+        font=font,
+        fill=(255, 255, 255, 150),
+        stroke_width=stroke,
+        stroke_fill=(0, 0, 0, 100),
+    )
+    band = band.rotate(
+        math.degrees(math.atan2(height, width)), expand=True, resample=Image.Resampling.BICUBIC
+    )
+    layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    layer.paste(band, ((width - band.width) // 2, (height - band.height) // 2), band)
+    return Image.alpha_composite(image.convert("RGBA"), layer).convert("RGB")
 
 
 def make_image(data: bytes, watermark: str = "") -> tuple[bytes, int, int]:

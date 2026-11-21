@@ -65,18 +65,35 @@ function draw(bitmap: ImageBitmap, longEdge: number, watermark?: string): Offscr
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(bitmap, 0, 0, width, height);
-  if (watermark) {
-    const size = Math.max(14, Math.round(width * 0.03));
-    ctx.font = `600 ${size}px system-ui, sans-serif`;
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'bottom';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
-    ctx.lineWidth = Math.max(1, size / 14);
-    ctx.strokeText(watermark, width - size, height - size);
-    ctx.fillText(watermark, width - size, height - size);
-  }
+  if (watermark) drawWatermark(ctx, width, height, watermark);
   return canvas;
+}
+
+/** Large and see-through, across the middle along the photo's diagonal, so it cannot be
+ * cropped away but the photo can still be judged. The server draws the same for Drive imports. */
+export function watermarkSize(textWidthAt100: number, width: number, height: number): number {
+  const diagonal = Math.hypot(width, height);
+  // The text spans about 70% of the diagonal, but is never taller than a fifth of the short side.
+  return Math.max(16, Math.min((diagonal * 0.7 * 100) / Math.max(1, textWidthAt100), Math.min(width, height) * 0.2));
+}
+
+function drawWatermark(ctx: OffscreenCanvasRenderingContext2D, width: number, height: number, text: string) {
+  const font = (px: number) => `700 ${px}px system-ui, sans-serif`;
+  ctx.font = font(100);
+  const size = watermarkSize(ctx.measureText(text).width, width, height);
+  ctx.save();
+  ctx.translate(width / 2, height / 2);
+  ctx.rotate(-Math.atan2(height, width));
+  ctx.font = font(size);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(1, size / 14);
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+  ctx.strokeText(text, 0, 0);
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
 }
 
 /** Encode as WebP under the byte limit, preferring a slightly smaller image to heavy
