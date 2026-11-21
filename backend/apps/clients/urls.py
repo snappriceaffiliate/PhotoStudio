@@ -38,6 +38,12 @@ urlpatterns = [
     path("client/login", views.ClientLoginView.as_view(), name="client-login"),
     path("client/logout", views.ClientLogoutView.as_view(), name="client-logout"),
     path("client/me", views.ClientMeView.as_view(), name="client-me"),
+    path("client/family", views.ClientFamilyView.as_view(), name="client-family"),
+    path(
+        "client/family/<uuid:pk>/turn-off",
+        views.ClientFamilyTurnOffView.as_view(),
+        name="client-family-turn-off",
+    ),
     path("client/photos", views.ClientPhotosView.as_view(), name="client-photos"),
     path(
         "client/selections/<uuid:photo_id>",

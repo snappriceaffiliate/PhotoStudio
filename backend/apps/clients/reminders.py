@@ -58,7 +58,10 @@ def due_reminders(accesses=None, now: datetime | None = None) -> list[Due]:
     now = now or timezone.now()
     qs = accesses if accesses is not None else ClientAccess.objects.all()
     qs = qs.filter(
-        is_active=True, event__status=Event.Status.SHARED, event__submission__isnull=True
+        is_active=True,
+        role=ClientAccess.Role.MAIN,  # only the main client can submit
+        event__status=Event.Status.SHARED,
+        event__submission__isnull=True,
     ).select_related("event", "studio")
     open_studios: dict = {}
     due = []

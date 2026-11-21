@@ -5,9 +5,13 @@ import { Field, FormMessage, useSubmit } from '../components/Form';
 import { BRAND_NAME, HeartIcon } from '../components/Brand';
 import { AuthLayout, Loading } from '../components/Layouts';
 import { brandStyle, logoClass, type StudioBranding } from '../branding/brand';
+import { FamilyPanel, useFamily } from './FamilyPanel';
 
 interface GalleryInfo {
   client_name: string;
+  /** "helper": a relative invited to help choose; only the main client can submit. */
+  role?: 'main' | 'helper';
+  main_name?: string;
   studio_name: string;
   studio_contact?: StudioContact | null;
   event: { title: string; selection_limit: number | null; expires_at: string | null; submitted_at: string | null };
@@ -26,7 +30,12 @@ interface GalleryPhoto {
   preview_url: string;
   selected: boolean;
   note: string;
+  /** Who chose it, when someone in the family did; and whether it was this login. */
+  chosen_by?: string | null;
+  chosen_by_me?: boolean;
 }
+
+const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
 
 interface PhotoPage {
   count: number;
@@ -105,10 +114,14 @@ export function GalleryPage() {
   const [viewer, setViewer] = useState<number | null>(null);
   const [notice, setNotice] = useState('');
   const [confirming, setConfirming] = useState(false);
+  const [familyOpen, setFamilyOpen] = useState(false);
   const sentinel = useRef<HTMLDivElement>(null);
   const loadingMore = useRef(false);
 
   const submitted = Boolean(info?.event.submitted_at);
+  const isHelper = info?.role === 'helper';
+  const mainName = firstName(info?.main_name ?? info?.client_name ?? '');
+  const { family, reload: reloadFamily } = useFamily(Boolean(info) && !isHelper);
   const limit = info?.event.selection_limit ?? null;
 
   const query = useCallback(
@@ -172,7 +185,20 @@ export function GalleryPage() {
     if (submitted) return showNotice('Your selection is submitted. Contact the studio to change it.');
     const select = note !== undefined || !photo.selected;
     // Update straight away; undo if the server refuses.
-    setPhotos((list) => list.map((p) => (p.id === photo.id ? { ...p, selected: select, note: note ?? (select ? p.note : '') } : p)));
+    setPhotos((list) =>
+      list.map((p) =>
+        p.id === photo.id
+          ? {
+              ...p,
+              selected: select,
+              note: note ?? (select ? p.note : ''),
+              // A newly chosen photo is this person's; a note change keeps who chose it.
+              chosen_by: !select ? null : p.selected ? p.chosen_by : info?.client_name,
+              chosen_by_me: !select ? false : p.selected ? p.chosen_by_me : true,
+            }
+          : p,
+      ),
+    );
     try {
       const result = await api<{ selected_count: number }>(`/client/selections/${photo.id}`, {
         method: select ? 'PUT' : 'DELETE',
@@ -239,6 +265,11 @@ export function GalleryPage() {
         <div className="banner good" role="status" style={{ marginTop: 16 }}>
           You submitted {info.selected} photos. {info.studio_name} has been told. Thank you!
         </div>
+      ) : isHelper ? (
+        <p className="gallery-help">
+          You are helping {mainName} choose. Tap the heart on the photos you like; {mainName} will see your picks and send
+          the final selection.
+        </p>
       ) : (
         <p className="gallery-help">
           Tap the heart to choose a photo, or tap the photo to see it large.
@@ -255,6 +286,11 @@ export function GalleryPage() {
             Selected {info.selected}
           </button>
         </div>
+        {!isHelper && !submitted && (
+          <button type="button" className="secondary family-button" onClick={() => setFamilyOpen(true)}>
+            Invite family
+          </button>
+        )}
         {info.albums.length > 0 && (
           <select aria-label="Album" value={album} onChange={(e) => setAlbum(e.target.value)}>
             <option value="">All albums</option>
@@ -287,12 +323,17 @@ export function GalleryPage() {
             <button
               className="heart"
               aria-pressed={p.selected}
-              aria-label={p.selected ? 'Remove from selection' : 'Add to selection'}
+              aria-label={
+                p.selected && isHelper && !p.chosen_by_me
+                  ? `Chosen by ${p.chosen_by}`
+                  : p.selected ? 'Remove from selection' : 'Add to selection'
+              }
               onClick={() => toggle(p)}
-              disabled={submitted}
+              disabled={submitted || (isHelper && p.selected && !p.chosen_by_me)}
             >
               <HeartIcon filled={p.selected} />
             </button>
+            {p.selected && p.chosen_by && !p.chosen_by_me && <span className="chosen-by">{firstName(p.chosen_by)}</span>}
             {p.note && <span className="note-dot" title={p.note}>✎</span>}
           </li>
         ))}
@@ -316,7 +357,11 @@ export function GalleryPage() {
               </div>
             ) : null}
           </div>
-          <button onClick={() => setConfirming(true)} disabled={info.selected === 0}>Send selection</button>
+          {isHelper ? (
+            <span className="muted helper-note">{mainName} will send the final selection</span>
+          ) : (
+            <button onClick={() => { void reloadFamily(); setConfirming(true); }} disabled={info.selected === 0}>Send selection</button>
+          )}
         </div>
       )}
 
@@ -326,6 +371,13 @@ export function GalleryPage() {
         <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
           <div className="dialog">
             <h2 id="confirm-title">Send {info.selected} photos to {info.studio_name}?</h2>
+            {family && family.helpers.some((h) => h.chosen > 0) && (
+              <p className="family-summary">
+                You chose {family.you.chosen}
+                {family.helpers.filter((h) => h.chosen > 0).map((h) => ` · ${firstName(h.client_name)} chose ${h.chosen}`).join('')}.
+                You can remove any of them before sending.
+              </p>
+            )}
             <p>
               The studio will prepare these photos for printing. After you send, the selection is locked; to change it,
               ask the studio to reopen it.
@@ -336,6 +388,17 @@ export function GalleryPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {familyOpen && (
+        <FamilyPanel
+          eventTitle={info.event.title}
+          studioName={info.studio_name}
+          onClose={() => {
+            setFamilyOpen(false);
+            void reloadFamily();
+          }}
+        />
       )}
 
       {viewer !== null && photos[viewer] && (
