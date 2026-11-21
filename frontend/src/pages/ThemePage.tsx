@@ -38,6 +38,7 @@ export function ThemePage() {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState<'' | 'logo' | 'colour'>('');
   const fileInput = useRef<HTMLInputElement>(null);
+  const [logoBroken, setLogoBroken] = useState(false);
 
   useEffect(() => {
     api<Branding>('/studio/branding')
@@ -63,7 +64,10 @@ export function ThemePage() {
     setNotice('');
     try {
       const result = await action();
-      if (result) setBranding(result);
+      if (result) {
+        setBranding(result);
+        setLogoBroken(false);
+      }
       setNotice(done);
     } catch (e) {
       setError(e instanceof ApiError ? Object.values(e.fields).flat().join(' ') || e.message : (e as Error).message);
@@ -112,7 +116,14 @@ export function ThemePage() {
             <h2>Logo</h2>
             <p className="muted">PNG with a transparent background works best. We shrink it to a small file in your browser.</p>
             <div className="logo-drop">
-              {branding.logo_url ? <img className={branding.logo_tone === 'light' ? 'on-dark' : undefined} src={branding.logo_url} alt={`${branding.studio_name} logo`} /> : <span className="muted">No logo yet</span>}
+              {branding.logo_url && !logoBroken ? (
+                <img className={branding.logo_tone === 'light' ? 'on-dark' : undefined} src={branding.logo_url}
+                  alt={`${branding.studio_name} logo`} onError={() => setLogoBroken(true)} />
+              ) : logoBroken ? (
+                <span className="field-error">Your saved logo could not be loaded. Upload it again.</span>
+              ) : (
+                <span className="muted">No logo yet</span>
+              )}
             </div>
             <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={chooseLogo} />
             <div className="actions">
