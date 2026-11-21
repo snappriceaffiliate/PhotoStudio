@@ -66,6 +66,8 @@ services:
       - "443:443/udp"
     environment:
       DOMAIN: ${DOMAIN:?Set DOMAIN in .env.production}
+      # The address every visitor ends up on; other names in DOMAIN redirect here.
+      PRIMARY_HOST: ${PRIMARY_HOST:-${DOMAIN}}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data # certificates: keep this volume
