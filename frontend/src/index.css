@@ -14,10 +14,10 @@
   --muted: #5e5950;          /* secondary text: 6.6:1 on paper */
   --line: #e6e0d6;
   --line-strong: #cfc7b9;
-  --primary: #0e5e5a;        /* peacock: actions and links, 7:1 on paper */
-  --primary-hover: #0b4c49;
-  --primary-soft: #e3f0ee;
-  --on-primary: #ffffff;     /* 7.4:1 */
+  --primary: #1c1a17;        /* black: actions and links, so the photos carry the colour */
+  --primary-hover: #000000;
+  --primary-soft: #efece6;
+  --on-primary: #ffffff;     /* 17:1 */
   --marigold: #e89a1c;       /* selections, hearts, highlights */
   --marigold-soft: #fdf1dc;
   --on-marigold: #1c1a17;    /* 7.8:1 */
@@ -57,10 +57,10 @@
     --muted: #b1aba1;
     --line: #2d2b27;
     --line-strong: #3d3a35;
-    --primary: #4fb3aa;
-    --primary-hover: #6cc4bc;
-    --primary-soft: #13302e;
-    --on-primary: #08201e;
+    --primary: #f2efe9;       /* white on dark pages */
+    --primary-hover: #ffffff;
+    --primary-soft: #2a2825;
+    --on-primary: #121110;
     --marigold: #f2b04a;
     --marigold-soft: #3a2c12;
     --on-marigold: #1c1a17;
@@ -384,7 +384,7 @@ figure img, .placeholder { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; 
 
 /* ---------------------------------------------------------------- studio branding */
 
-/* A studio's accent colour replaces the PickSnap teal inside its galleries. The server only
+/* A studio's accent colour replaces the PickSnap black inside its galleries. The server only
    accepts colours with 4.5:1 contrast on white, so white button text and links stay readable. */
 .branded {
   --primary: var(--brand-accent);

@@ -14,11 +14,12 @@ interface Branding {
   allowed: boolean;
 }
 
-const DEFAULT_ACCENT = '#0E5E5A';
+const DEFAULT_ACCENT = '#1C1A17';
 
 // Darker colours that read well on white and suit Indian studio brands.
 const SWATCHES = [
-  { name: `Peacock (${BRAND_NAME})`, hex: '#0E5E5A' },
+  { name: `Black (${BRAND_NAME})`, hex: '#1C1A17' },
+  { name: 'Peacock', hex: '#0E5E5A' },
   { name: 'Maroon', hex: '#8A1C3B' },
   { name: 'Vermilion', hex: '#B3361B' },
   { name: 'Navy', hex: '#1F3A68' },
@@ -85,7 +86,7 @@ export function BrandingPage() {
 
   function saveColour(value: string | null) {
     run('colour', () => api<Branding>('/studio/branding', { method: 'PATCH', body: { accent_color: value } }),
-      value ? 'Colour saved.' : `Colour reset to ${BRAND_NAME} teal.`);
+      value ? 'Colour saved.' : `Colour reset to ${BRAND_NAME} black.`);
     if (!value) setColour(DEFAULT_ACCENT);
   }
 
@@ -161,7 +162,7 @@ export function BrandingPage() {
                 {busy === 'colour' ? 'Saving…' : 'Save colour'}
               </button>
               {branding.accent_color && (
-                <button type="button" className="link" disabled={busy !== ''} onClick={() => saveColour(null)}>Reset to {BRAND_NAME} teal</button>
+                <button type="button" className="link" disabled={busy !== ''} onClick={() => saveColour(null)}>Reset to {BRAND_NAME} black</button>
               )}
             </div>
           </section>
