@@ -184,6 +184,13 @@ describe('choosing photos', () => {
     expect(screen.getByRole('link', { name: 'PickSnap' })).toBeTruthy();
   });
 
+  it('shows the studio name when its logo cannot be loaded', async () => {
+    gallery({ branding: { logo_url: 'https://storage.test/missing.webp', logo_tone: 'dark', accent_color: null }, cover_url: 'data:,' });
+    renderApp('/gallery');
+    fireEvent.error(await screen.findByAltText('Lens and Light'));
+    expect(await screen.findByText('Lens and Light', { selector: 'p.brand' })).toBeTruthy();
+  });
+
   it('puts a white logo on a dark backing so it stays visible', async () => {
     gallery({ branding: { logo_url: 'data:image/webp;base64,AAAA', logo_tone: 'light', accent_color: null }, cover_url: 'data:,' });
     renderApp('/gallery');

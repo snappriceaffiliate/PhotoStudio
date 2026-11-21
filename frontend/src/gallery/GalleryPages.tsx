@@ -57,10 +57,15 @@ export function ClientLoginPage() {
   );
 }
 
-/** The studio's logo when it has one (named for screen readers), otherwise its name. */
+/** The studio's logo when it has one (named for screen readers), otherwise its name. A logo
+ * that cannot be loaded also falls back to the name, instead of the browser's broken image. */
 function StudioMark({ info }: { info: GalleryInfo }) {
-  if (info.branding?.logo_url) {
-    return <img className={logoClass(info.branding.logo_tone)} src={info.branding.logo_url} alt={info.studio_name} />;
+  const [broken, setBroken] = useState(false);
+  if (info.branding?.logo_url && !broken) {
+    return (
+      <img className={logoClass(info.branding.logo_tone)} src={info.branding.logo_url} alt={info.studio_name}
+        onError={() => setBroken(true)} />
+    );
   }
   return <p className="brand">{info.studio_name}</p>;
 }
