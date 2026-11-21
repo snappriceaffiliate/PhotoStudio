@@ -23,11 +23,11 @@ function routes(initial: Record<string, unknown> = {}, extra: Record<string, unk
 const saveButton = () => screen.getByRole('button', { name: 'Save colour' }) as HTMLButtonElement;
 
 describe('accent colour', () => {
-  it('starts with the PickSnap teal and nothing to save', async () => {
+  it('starts with the PickSnap black and nothing to save', async () => {
     mockApi(routes().routes);
     renderApp('/branding');
     expect(await screen.findByRole('heading', { name: 'Branding' })).toBeTruthy();
-    expect((screen.getByLabelText('Colour code') as HTMLInputElement).value).toBe('#0E5E5A');
+    expect((screen.getByLabelText('Colour code') as HTMLInputElement).value).toBe('#1C1A17');
     expect(saveButton().disabled).toBe(true);
     expect(screen.getByText(/Readable on white/)).toBeTruthy();
   });
@@ -45,7 +45,7 @@ describe('accent colour', () => {
     fireEvent.click(saveButton());
     expect((await screen.findByRole('status')).textContent).toBe('Colour saved.');
     expect(callsTo(calls, 'PATCH', '/api/v1/studio/branding')[0].body).toEqual({ accent_color: '#8A1C3B' });
-    expect(screen.getByRole('button', { name: /Reset to PickSnap teal/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Reset to PickSnap black/ })).toBeTruthy();
   });
 
   it('refuses a colour that is too light, with its contrast, and will not send it', async () => {
@@ -68,7 +68,7 @@ describe('accent colour', () => {
     expect(screen.getByText('Use a colour code like #8A1C3B.')).toBeTruthy();
   });
 
-  it('resets to the standard teal', async () => {
+  it('resets to the standard black', async () => {
     const r = routes({ accent_color: '#8A1C3B' }, {
       'PATCH /api/v1/studio/branding': () => ({ ...base, accent_color: null }),
     });
@@ -76,10 +76,10 @@ describe('accent colour', () => {
     renderApp('/branding');
     await screen.findByRole('heading', { name: 'Branding' });
     expect((screen.getByLabelText('Colour code') as HTMLInputElement).value).toBe('#8A1C3B');
-    press(/Reset to PickSnap teal/);
-    expect((await screen.findByRole('status')).textContent).toBe('Colour reset to PickSnap teal.');
+    press(/Reset to PickSnap black/);
+    expect((await screen.findByRole('status')).textContent).toBe('Colour reset to PickSnap black.');
     expect(callsTo(calls, 'PATCH', '/api/v1/studio/branding')[0].body).toEqual({ accent_color: null });
-    expect((screen.getByLabelText('Colour code') as HTMLInputElement).value).toBe('#0E5E5A');
+    expect((screen.getByLabelText('Colour code') as HTMLInputElement).value).toBe('#1C1A17');
   });
 
   it('shows the server message when saving fails', async () => {
