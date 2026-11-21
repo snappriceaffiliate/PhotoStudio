@@ -135,7 +135,11 @@ INSTAGRAM_HANDLE = re.compile(r"^[A-Za-z0-9._]{1,30}$")
 
 
 class ProfileSerializer(serializers.ModelSerializer):
-    name = serializers.CharField(max_length=200, validators=[single_line])
+    name = serializers.CharField(
+        max_length=200,
+        validators=[single_line],
+        error_messages={"blank": "Enter the studio's name."},
+    )
     phone = serializers.CharField(max_length=30, allow_blank=True, required=False)
     address = serializers.CharField(
         max_length=300, allow_blank=True, required=False, validators=[single_line]
