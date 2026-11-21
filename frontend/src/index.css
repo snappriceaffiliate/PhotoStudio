@@ -388,6 +388,9 @@ figure img, .placeholder { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; 
 .brand-preview-cover strong { font-family: var(--font-display); font-size: 22px; font-weight: 600; }
 .brand-preview-cover .brand { color: #f6d28b; }
 .brand-preview-cover .studio-logo { background: rgba(255, 255, 255, 0.94); padding: 6px 10px; border-radius: 10px; box-sizing: content-box; }
+/* A pale logo (white lettering) on a dark backing, so it is not white on white. */
+.gallery-cover .studio-logo.on-dark, .brand-preview-cover .studio-logo.on-dark { background: rgba(20, 18, 16, 0.72); }
+.logo-drop img.on-dark { background: #1c1a17; padding: 8px 12px; border-radius: 8px; }
 .preview-button { align-self: flex-start; margin-top: 10px; background: var(--primary); color: var(--on-primary); border-radius: 999px; padding: 10px 18px; font-weight: 600; font-size: 14px; }
 .preview-button.small { margin: 0 0 0 auto; padding: 8px 14px; font-size: 13px; }
 .brand-preview-bar { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--card); border-top: 1px solid var(--line); font-size: 14px; }

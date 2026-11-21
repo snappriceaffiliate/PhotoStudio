@@ -42,13 +42,54 @@ def logo_url(studio: Studio) -> str | None:
     return storage.signed_download_url(studio.logo_key) if studio.logo_key else None
 
 
+def tone_of(data: bytes) -> str:
+    """ "light" when the logo's visible pixels are mostly pale (white lettering on a
+    transparent background), so it needs a dark backing to be seen; otherwise "dark"."""
+    import io
+
+    from PIL import Image
+
+    try:
+        with Image.open(io.BytesIO(data)) as opened:
+            image = opened.convert("RGBA")
+    except Exception:  # not an image Pillow can read: show it on white, as before
+        return "dark"
+    image.thumbnail((200, 200))
+    total = weight = 0.0
+    pixels = image.tobytes()
+    for i in range(0, len(pixels), 4):
+        r, g, b, a = pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]
+        if a < 40:
+            continue
+        total += (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 * a
+        weight += a
+    return "light" if weight and total / weight > 0.6 else "dark"
+
+
+def logo_tone(studio: Studio) -> str | None:
+    """The logo's tone; logos uploaded before tones existed are checked once, then saved."""
+    if not studio.logo_key:
+        return None
+    if not studio.logo_tone:
+        try:
+            studio.logo_tone = tone_of(storage.read_object(studio.logo_key))
+        except Exception:  # unreadable for now: show it on white, try again next time
+            return "dark"
+        Studio.objects.filter(pk=studio.pk).update(logo_tone=studio.logo_tone)
+    return studio.logo_tone
+
+
 def client_branding(studio: Studio) -> dict | None:
     """What the client gallery shows, or None for the standard PickSnap look."""
     if not (studio.logo_key or studio.accent_color):
         return None
     if not entitlements.branding_allowed(studio.pk):
         return None
-    return {"logo_url": logo_url(studio), "accent_color": studio.accent_color or None}
+    return {
+        "logo_url": logo_url(studio),
+        "logo_tone": logo_tone(studio),
+        "accent_color": studio.accent_color or None,
+    }
 
 
 def _data(studio: Studio) -> dict:
@@ -56,6 +97,7 @@ def _data(studio: Studio) -> dict:
     return {
         "studio_name": studio.name,
         "logo_url": logo_url(studio),
+        "logo_tone": logo_tone(studio),
         "accent_color": studio.accent_color or None,
         "allowed": allowed,
     }
@@ -112,7 +154,8 @@ class BrandingLogoView(APIView):
         old_key = studio.logo_key
         studio.logo_key = f"studios/{studio.pk}/logo/{secrets.token_hex(8)}.webp"
         storage.put_object(studio.logo_key, data, "image/webp")
-        studio.save(update_fields=["logo_key", "updated_at"])
+        studio.logo_tone = tone_of(data)
+        studio.save(update_fields=["logo_key", "logo_tone", "updated_at"])
         if old_key:
             storage.delete_object(old_key)
         record(request, "studio.branding_logo", detail="uploaded")
@@ -122,8 +165,8 @@ class BrandingLogoView(APIView):
         studio = Studio.objects.get(pk=request.studio_id)
         if studio.logo_key:
             storage.delete_object(studio.logo_key)
-            studio.logo_key = ""
-            studio.save(update_fields=["logo_key", "updated_at"])
+            studio.logo_key = studio.logo_tone = ""
+            studio.save(update_fields=["logo_key", "logo_tone", "updated_at"])
             record(request, "studio.branding_logo", detail="removed")
         return Response(status=status.HTTP_204_NO_CONTENT)
 

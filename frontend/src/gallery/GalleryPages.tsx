@@ -4,7 +4,7 @@ import { api, ApiError } from '../api/client';
 import { Field, FormMessage, useSubmit } from '../components/Form';
 import { BRAND_NAME, HeartIcon } from '../components/Brand';
 import { AuthLayout, Loading } from '../components/Layouts';
-import { brandStyle, type StudioBranding } from '../branding/brand';
+import { brandStyle, logoClass, type StudioBranding } from '../branding/brand';
 
 interface GalleryInfo {
   client_name: string;
@@ -60,7 +60,7 @@ export function ClientLoginPage() {
 /** The studio's logo when it has one (named for screen readers), otherwise its name. */
 function StudioMark({ info }: { info: GalleryInfo }) {
   if (info.branding?.logo_url) {
-    return <img className="studio-logo" src={info.branding.logo_url} alt={info.studio_name} />;
+    return <img className={logoClass(info.branding.logo_tone)} src={info.branding.logo_url} alt={info.studio_name} />;
   }
   return <p className="brand">{info.studio_name}</p>;
 }

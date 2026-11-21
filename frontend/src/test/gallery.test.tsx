@@ -184,6 +184,12 @@ describe('choosing photos', () => {
     expect(screen.getByRole('link', { name: 'PickSnap' })).toBeTruthy();
   });
 
+  it('puts a white logo on a dark backing so it stays visible', async () => {
+    gallery({ branding: { logo_url: 'data:image/webp;base64,AAAA', logo_tone: 'light', accent_color: null }, cover_url: 'data:,' });
+    renderApp('/gallery');
+    expect((await screen.findByAltText('Lens and Light')).className).toBe('studio-logo on-dark');
+  });
+
   it('uses the standard look when the studio has no branding', async () => {
     gallery();
     renderApp('/gallery');

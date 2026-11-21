@@ -12,6 +12,9 @@ class Studio(TimestampedModel):
     # Branding shown to clients in galleries (plans with custom_branding only).
     logo_key = models.CharField(max_length=200, blank=True)
     accent_color = models.CharField(max_length=7, blank=True, help_text="Hex colour, e.g. #8A1C3B.")
+    # "light" for a logo drawn in white or pale colours (shown on a dark backing), "dark"
+    # otherwise (shown on white). Worked out from the image when it is uploaded.
+    logo_tone = models.CharField(max_length=5, blank=True)
     # Studio profile: how clients reach the studio. Shown in client galleries when filled in.
     phone = models.CharField(
         max_length=16, blank=True, help_text="WhatsApp number, country code and digits only."
