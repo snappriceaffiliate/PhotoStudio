@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api/client';
+import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import type { User } from '../auth/types';
 import { Field, FormMessage, useSubmit } from '../components/Form';
@@ -122,11 +122,17 @@ function AccountForm({ user, onSaved }: { user: User; onSaved: () => Promise<voi
 function PasswordForm() {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
+  const [again, setAgain] = useState('');
   const [saved, setSaved] = useState('');
   const { busy, error, fields, onSubmit } = useSubmit(async () => {
-    await api('/auth/password-change', { method: 'POST', body: { current_password: current, new_password: next } });
+    if (again && again !== next) throw new ApiError(400, { new_password_confirm: ['The passwords do not match.'] });
+    await api('/auth/password-change', {
+      method: 'POST',
+      body: { current_password: current, new_password: next, new_password_confirm: again },
+    });
     setCurrent('');
     setNext('');
+    setAgain('');
     setSaved('Password changed. Other devices will need to log in again.');
   });
   return (
@@ -140,6 +146,8 @@ function PasswordForm() {
           <Field label="New password" name="new_password" type="password" value={next}
             onChange={(e) => { setSaved(''); setNext(e.target.value); }} errors={fields} autoComplete="new-password"
             hint="At least 8 characters, not easy to guess" required />
+          <Field label="Retype new password" name="new_password_confirm" type="password" value={again}
+            onChange={(e) => { setSaved(''); setAgain(e.target.value); }} errors={fields} autoComplete="new-password" required />
         </div>
         <div className="actions"><button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Change password'}</button></div>
       </form>

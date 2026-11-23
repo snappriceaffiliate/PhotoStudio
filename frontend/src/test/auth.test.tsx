@@ -170,11 +170,23 @@ describe('password links', () => {
     renderApp('/reset-password?uid=abc&token=xyz');
     await screen.findByRole('heading', { name: 'Choose a new password' });
     typeInto('New password', 'another-strong-pass-42');
+    typeInto('Retype new password', 'another-strong-pass-42');
     press('Save password');
     expect(await screen.findByRole('heading', { name: 'Events' })).toBeTruthy();
     expect(callsTo(calls, 'POST', '/api/v1/auth/password-set')[0].body).toEqual({
-      uid: 'abc', token: 'xyz', password: 'another-strong-pass-42',
+      uid: 'abc', token: 'xyz', password: 'another-strong-pass-42', password_confirm: 'another-strong-pass-42',
     });
+  });
+
+  it('a reset link catches a mistyped new password before sending', async () => {
+    const calls = mockApi(session().routes);
+    renderApp('/reset-password?uid=abc&token=xyz');
+    await screen.findByRole('heading', { name: 'Choose a new password' });
+    typeInto('New password', 'another-strong-pass-42');
+    typeInto('Retype new password', 'another-strong-pass-24');
+    press('Save password');
+    expect((await screen.findByText('The passwords do not match.')).id).toBe('field-password_confirm-error');
+    expect(callsTo(calls, 'POST', '/api/v1/auth/password-set')).toHaveLength(0);
   });
 
   it('a staff invitation uses its own title', async () => {

@@ -117,19 +117,32 @@ class TestAccountEdges:
         api.json("post", "/api/v1/auth/password-reset", {"email": owner.email})
         params = link_params(outbox[0][2])
 
-        weak = api.json("post", "/api/v1/auth/password-set", {**params, "password": "12345678"})
+        weak = api.json(
+            "post",
+            "/api/v1/auth/password-set",
+            {**params, "password": "12345678", "password_confirm": "12345678"},
+        )
         assert weak.status_code == 400 and weak.json()["password"]
         owner.refresh_from_db()
         assert owner.check_password(PASSWORD)  # unchanged
 
-        strong = {**params, "password": "a-much-better-pass-73"}
+        strong = {
+            **params,
+            "password": "a-much-better-pass-73",
+            "password_confirm": "a-much-better-pass-73",
+        }
         assert api.json("post", "/api/v1/auth/password-set", strong).status_code == 200
 
     def test_a_tampered_link_is_refused(self, api, make_studio, outbox):
         _, owner = make_studio("alpha")
         api.json("post", "/api/v1/auth/password-reset", {"email": owner.email})
         params = link_params(outbox[0][2])
-        forged = {**params, "token": params["token"][:-3] + "abc", "password": "a-strong-pass-12"}
+        forged = {
+            **params,
+            "token": params["token"][:-3] + "abc",
+            "password": "a-strong-pass-12",
+            "password_confirm": "a-strong-pass-12",
+        }
         response = api.json("post", "/api/v1/auth/password-set", forged)
         assert response.status_code == 400
         assert "invalid or has expired" in response.json()["detail"]

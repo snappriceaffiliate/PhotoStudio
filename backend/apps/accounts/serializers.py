@@ -76,6 +76,7 @@ class PasswordSetSerializer(serializers.Serializer):
     uid = serializers.CharField()
     token = serializers.CharField()
     password = serializers.CharField(trim_whitespace=False)
+    password_confirm = serializers.CharField(trim_whitespace=False)
 
 
 class StaffSerializer(serializers.ModelSerializer):
