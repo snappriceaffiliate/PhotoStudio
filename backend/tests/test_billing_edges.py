@@ -41,7 +41,7 @@ class TestSubscribe:
         go_active(owner_on_trial[0])
         response = api.json("post", "/api/v1/billing/subscribe", {"plan": "studio"})
         assert response.status_code == 400
-        assert "already have an active plan" in response.json()["detail"]
+        assert response.json()["detail"] == "You are already on the Studio plan."
 
     def test_a_cancelling_plan_can_be_bought_again(
         self, api, owner_on_trial, razorpay_keys, monkeypatch

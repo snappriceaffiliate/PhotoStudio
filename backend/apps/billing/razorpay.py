@@ -67,17 +67,28 @@ def create_plan(name: str, amount_paise: int) -> str:
     return plan["id"]
 
 
-def create_subscription(plan_id: str, notes: dict) -> dict:
-    return _request(
-        "POST",
-        "/subscriptions",
-        {
-            "plan_id": plan_id,
-            "total_count": MONTHLY_TOTAL_COUNT,
-            "customer_notify": True,
-            "notes": notes,
-        },
-    )
+def create_subscription(
+    plan_id: str,
+    notes: dict,
+    start_at: int | None = None,
+    upfront_paise: int = 0,
+    upfront_name: str = "",
+) -> dict:
+    """A monthly subscription. With start_at, the first full charge is on that date; an
+    upfront amount is collected when the customer approves it (Razorpay "addons")."""
+    body = {
+        "plan_id": plan_id,
+        "total_count": MONTHLY_TOTAL_COUNT,
+        "customer_notify": True,
+        "notes": notes,
+    }
+    if start_at:
+        body["start_at"] = start_at
+    if upfront_paise:
+        body["addons"] = [
+            {"item": {"name": upfront_name[:100], "amount": upfront_paise, "currency": "INR"}}
+        ]
+    return _request("POST", "/subscriptions", body)
 
 
 def fetch_subscription(subscription_id: str) -> dict:
