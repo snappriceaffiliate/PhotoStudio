@@ -24,10 +24,19 @@ interface BillingInfo {
   status: string;
   plan_code: string | null;
   cancel_at_period_end: boolean;
+  scheduled_plan_code?: string | null;
   limits: { max_active_events: number | null; max_photos_per_event: number; max_staff: number };
   usage: { active_events: number; staff: number };
   plans: PlanInfo[];
   payments_configured: boolean;
+}
+
+interface Quote {
+  kind: 'new' | 'upgrade' | 'scheduled';
+  plan: PlanInfo;
+  charge_now_inr: number;
+  days_left: number;
+  starts_at: string | null;
 }
 
 interface CheckoutStart {
@@ -70,6 +79,7 @@ export function BillingPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [busy, setBusy] = useState('');
+  const [offer, setOffer] = useState<Quote | null>(null);
   const isOwner = user?.role === 'owner';
 
   const load = useCallback(async () => {
@@ -80,9 +90,34 @@ export function BillingPage() {
     load().catch(() => setError('Could not load billing.'));
   }, [load]);
 
+  const paying = info !== null && info.plan_code !== null && (info.state === 'active' || info.state === 'ending');
+
+  /** While a plan is paid for, show what the change costs before Razorpay opens. */
   async function choose(plan: PlanInfo) {
     setError('');
     setSuccess('');
+    if (!paying) return checkout(plan, 'new');
+    setBusy(plan.code);
+    try {
+      setOffer(await api<Quote>(`/billing/quote?plan=${encodeURIComponent(plan.code)}`));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not work out the price. Try again.');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  const done: Record<Quote['kind'], (plan: PlanInfo, quote: Quote | null) => string> = {
+    new: (plan) => `Payment received. You are on the ${plan.name} plan.`,
+    upgrade: (plan, quote) => `You are on the ${plan.name} plan now. Full billing starts ${day(quote?.starts_at ?? null)}.`,
+    scheduled: (plan, quote) =>
+      plan.code === info?.plan_code
+        ? `Your ${plan.name} plan continues after ${day(quote?.starts_at ?? null)}.`
+        : `Done. You switch to the ${plan.name} plan on ${day(quote?.starts_at ?? null)}.`,
+  };
+
+  async function checkout(plan: PlanInfo, kind: Quote['kind'], quote: Quote | null = null) {
+    setOffer(null);
     setBusy(plan.code);
     try {
       const start = await api<CheckoutStart>('/billing/subscribe', { method: 'POST', body: { plan: plan.code } });
@@ -91,14 +126,14 @@ export function BillingPage() {
         key: start.key_id,
         subscription_id: start.subscription_id,
         name: BRAND_NAME,
-        description: `${plan.name} plan for ${start.studio_name}`,
+        description: kind === 'new' ? `${plan.name} plan for ${start.studio_name}` : `Change to ${plan.name} for ${start.studio_name}`,
         prefill: start.prefill,
         image: new URL(`${import.meta.env.BASE_URL}icon-192.png`, window.location.origin).href,
         theme: { color: '#3b2f8f' },
         handler: async (response: RazorpayResponse) => {
           try {
             await api('/billing/verify', { method: 'POST', body: response });
-            setSuccess(`Payment received. You are on the ${plan.name} plan.`);
+            setSuccess(done[kind](plan, quote));
             await Promise.all([load(), refresh()]);
           } catch (err) {
             setError(err instanceof ApiError ? err.message : 'We could not confirm the payment yet. Refresh in a minute.');
@@ -139,6 +174,14 @@ export function BillingPage() {
     lapsed: info.until && new Date(info.until) > new Date() ? `Plan ended · client galleries close ${day(info.until)}` : 'Plan ended',
   };
   const limit = (n: number | null) => (n === null ? 'Unlimited' : n.toLocaleString('en-IN'));
+  const currentPlan = info.plans.find((p) => p.code === info.plan_code);
+  const scheduled = info.plans.find((p) => p.code === info.scheduled_plan_code) ?? null;
+  const label = (p: PlanInfo) => {
+    if (!p.available) return 'Not available yet';
+    if (!paying || !currentPlan) return `Choose ${p.name}`;
+    if (p.code === currentPlan.code) return `Keep ${p.name}`;
+    return p.price_inr > currentPlan.price_inr ? `Upgrade to ${p.name}` : `Switch to ${p.name}`;
+  };
 
   return (
     <>
@@ -148,6 +191,7 @@ export function BillingPage() {
       <section className={`panel billing-status state-${info.state}`}>
         <h2>{headline[info.state]}</h2>
         {info.state !== 'active' && info.state !== 'trial' && <p>{info.message}</p>}
+        {scheduled && <p>Switching to the {scheduled.name} plan on {day(info.until)}.</p>}
         <dl className="usage">
           <div><dt>Active events</dt><dd>{info.usage.active_events} / {limit(info.limits.max_active_events)}</dd></div>
           <div><dt>Photos per event</dt><dd>up to {limit(info.limits.max_photos_per_event)}</dd></div>
@@ -166,6 +210,7 @@ export function BillingPage() {
       <ul className="plans">
         {info.plans.map((p) => {
           const current = info.plan_code === p.code && info.state !== 'lapsed';
+          const keepable = current && paying && (info.cancel_at_period_end || info.state === 'ending' || scheduled !== null);
           return (
             <li key={p.code} className={current ? 'plan current' : 'plan'}>
               <h3>{p.name}</h3>
@@ -176,20 +221,66 @@ export function BillingPage() {
                 <li>{p.max_staff} {p.max_staff === 1 ? 'person' : 'people'}</li>
                 {p.custom_theme && <li>Your own theme and logo in client galleries</li>}
               </ul>
-              {current ? (
-                <span className="status status-shared">Current plan</span>
-              ) : (
-                isOwner && (
-                  <button onClick={() => choose(p)} disabled={!p.available || busy !== ''}>
-                    {busy === p.code ? 'Opening…' : p.available ? `Choose ${p.name}` : 'Not available yet'}
-                  </button>
-                )
+              {current && <span className="status status-shared">Current plan</span>}
+              {scheduled?.code === p.code && <span className="status status-shared">From {day(info.until)}</span>}
+              {(!current || keepable) && scheduled?.code !== p.code && isOwner && (
+                <button onClick={() => choose(p)} disabled={!p.available || busy !== ''}>
+                  {busy === p.code ? 'Opening…' : label(p)}
+                </button>
               )}
             </li>
           );
         })}
       </ul>
       <p className="muted">Payments are handled by Razorpay; card details never reach this app.</p>
+      {offer && currentPlan && (
+        <ChangeDialog quote={offer} current={currentPlan} onCancel={() => setOffer(null)} onConfirm={() => checkout(offer.plan, offer.kind, offer)} />
+      )}
     </>
+  );
+}
+
+/** What a plan change does and costs, confirmed before Razorpay Checkout opens. */
+function ChangeDialog({ quote, current, onCancel, onConfirm }: { quote: Quote; current: PlanInfo; onCancel: () => void; onConfirm: () => void }) {
+  const { plan } = quote;
+  const from = day(quote.starts_at);
+  const keep = plan.code === current.code;
+  const title = quote.kind === 'upgrade' ? `Upgrade to ${plan.name}` : keep ? `Keep the ${plan.name} plan` : `Switch to ${plan.name} on ${from}`;
+  return (
+    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="change-title">
+      <div className="dialog">
+        <h2 id="change-title">{title}</h2>
+        {quote.kind === 'upgrade' ? (
+          <ul className="change-summary">
+            <li>The {plan.name} limits start <strong>now</strong>.</li>
+            <li>
+              {quote.charge_now_inr > 0 ? (
+                <>Pay <strong>{rupees(quote.charge_now_inr)}</strong> today: the difference between {current.name} and {plan.name} for the {quote.days_left} {quote.days_left === 1 ? 'day' : 'days'} left this month.</>
+              ) : (
+                <>Nothing to pay today: only a few hours are left this month.</>
+              )}
+            </li>
+            <li>From {from}: <strong>{rupees(plan.price_inr)}</strong> every month, instead of {rupees(current.price_inr)}.</li>
+          </ul>
+        ) : (
+          <ul className="change-summary">
+            {keep ? (
+              <li>Your plan continues after {from}. Nothing to pay today.</li>
+            ) : (
+              <li>You keep the {current.name} plan until {from}. Nothing to pay today, and no refund for this month.</li>
+            )}
+            <li>From {from}: <strong>{rupees(plan.price_inr)}</strong> every month.</li>
+            {!keep && plan.max_active_events !== null && (
+              <li>{plan.name} allows {plan.max_active_events} active events. Nothing is deleted; archive events if you have more.</li>
+            )}
+          </ul>
+        )}
+        <p className="muted">Razorpay asks you to approve the new monthly amount.</p>
+        <div className="actions">
+          <button type="button" onClick={onConfirm}>{quote.charge_now_inr > 0 ? `Pay ${rupees(quote.charge_now_inr)}` : 'Continue to Razorpay'}</button>
+          <button type="button" className="secondary" onClick={onCancel}>Not now</button>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -505,6 +505,77 @@ describe('billing', () => {
     expect(await screen.findByText('Payment received. You are on the Studio plan.')).toBeTruthy();
   });
 
+  describe('changing plan while paying', () => {
+    const three = [
+      { code: 'starter', name: 'Starter', price_inr: 999, max_active_events: 5, max_photos_per_event: 2000, max_staff: 1, available: true },
+      { ...plans[0] },
+      { ...plans[1], available: true },
+    ];
+    const paying = {
+      ...info, state: 'active', plan: 'Studio', status: 'active', plan_code: 'studio', plans: three, until: '2026-12-21T00:00:00Z',
+    };
+
+    it('labels upgrades and switches, and shows the prorated price before Razorpay opens', async () => {
+      const calls = mockApi({
+        ...session(owner).routes,
+        'GET /api/v1/billing': paying,
+        'GET /api/v1/billing/quote': {
+          kind: 'upgrade', plan: three[2], charge_now_inr: 250, days_left: 3, starts_at: '2026-12-21T00:00:00Z',
+        },
+        'POST /api/v1/billing/subscribe': {
+          subscription_id: 'sub_2', key_id: 'rzp_test_1', plan: three[2], prefill: { name: 'Owner', email: 'o@x.com' }, studio_name: 'Lens',
+        },
+        'POST /api/v1/billing/verify': { state: 'active' },
+      });
+      let options: Record<string, unknown> = {};
+      const open = vi.fn();
+      vi.stubGlobal('Razorpay', class {
+        constructor(o: Record<string, unknown>) { options = o; }
+        open = open;
+        on() {}
+      });
+      renderApp('/billing');
+      expect(await screen.findByRole('button', { name: 'Switch to Starter' })).toBeTruthy();
+      press('Upgrade to Pro');
+      const dialog = await screen.findByRole('dialog', { name: 'Upgrade to Pro' });
+      expect(dialog.textContent).toContain('Pay ₹250 today');
+      expect(dialog.textContent).toContain('for the 3 days left this month');
+      expect(dialog.textContent).toContain('₹4,999 every month, instead of ₹2,499');
+      expect(callsTo(calls, 'POST', '/api/v1/billing/subscribe')).toHaveLength(0);
+      press('Pay ₹250');
+      await waitFor(() => expect(open).toHaveBeenCalled());
+      expect(options).toMatchObject({ subscription_id: 'sub_2', description: 'Change to Pro for Lens' });
+      await (options.handler as (r: unknown) => Promise<void>)({ razorpay_payment_id: 'p', razorpay_subscription_id: 'sub_2', razorpay_signature: 's' });
+      expect(await screen.findByText(/You are on the Pro plan now\. Full billing starts/)).toBeTruthy();
+    });
+
+    it('explains a downgrade waits for the renewal date', async () => {
+      mockApi({
+        ...session(owner).routes,
+        'GET /api/v1/billing': paying,
+        'GET /api/v1/billing/quote': {
+          kind: 'scheduled', plan: three[0], charge_now_inr: 0, days_left: 0, starts_at: '2026-12-21T00:00:00Z',
+        },
+      });
+      renderApp('/billing');
+      press(await screen.findByRole('button', { name: 'Switch to Starter' }).then((b) => b.textContent!));
+      const dialog = await screen.findByRole('dialog', { name: /Switch to Starter on/ });
+      expect(dialog.textContent).toContain('You keep the Studio plan until');
+      expect(dialog.textContent).toContain('Starter allows 5 active events. Nothing is deleted');
+      expect(within(dialog).getByRole('button', { name: 'Continue to Razorpay' })).toBeTruthy();
+      press('Not now');
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    });
+
+    it('shows a waiting switch on the plan it starts', async () => {
+      mockApi({ ...session(owner).routes, 'GET /api/v1/billing': { ...paying, scheduled_plan_code: 'starter' } });
+      renderApp('/billing');
+      expect(await screen.findByText(/Switching to the Starter plan on/)).toBeTruthy();
+      expect(screen.getByText(/^From /)).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Keep Studio' })).toBeTruthy();
+    });
+  });
+
   it('shows the server message when checkout cannot start', async () => {
     mockApi({
       ...session(owner).routes,

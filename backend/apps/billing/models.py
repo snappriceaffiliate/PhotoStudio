@@ -91,6 +91,20 @@ class Subscription(TenantModel):
         related_name="+",
         help_text="Plan chosen at checkout, until the payment is confirmed.",
     )
+    # Checkout in progress: the Razorpay subscription being approved and what it does.
+    pending_razorpay_subscription_id = models.CharField(
+        max_length=40, null=True, blank=True, unique=True
+    )
+    pending_change = models.CharField(max_length=10, blank=True)
+    pending_charge_paise = models.PositiveIntegerField(default=0)
+    scheduled_plan = models.ForeignKey(
+        Plan,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Plan that takes over on the renewal date (a downgrade).",
+    )
     trial_ends_at = models.DateTimeField(null=True, blank=True)
     current_period_end = models.DateTimeField(null=True, blank=True)
     past_due_since = models.DateTimeField(null=True, blank=True)
