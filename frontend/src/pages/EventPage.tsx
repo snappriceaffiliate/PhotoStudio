@@ -6,6 +6,7 @@ import { Field, FormMessage, useSubmit } from '../components/Form';
 import { duplicateNames, EventUploader, toUploadFiles, type Progress, type UploadFile } from '../upload/uploader';
 import { ArchivePanel, SelectionPanel } from './SelectionPanel';
 import { SharePanel } from './SharePanel';
+import { useCloseOnBack } from '../components/useCloseOnBack';
 
 export interface EventDetail {
   id: string;
@@ -593,6 +594,7 @@ function PhotoGrid({ eventId, version }: { eventId: string; version: number }) {
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [count, setCount] = useState(0);
   const [open, setOpen] = useState<PhotoItem | null>(null);
+  useCloseOnBack(open !== null, () => setOpen(null));
 
   useEffect(() => {
     let current = true;

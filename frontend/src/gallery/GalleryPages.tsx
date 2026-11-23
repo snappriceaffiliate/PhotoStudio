@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type TouchEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
+import { useCloseOnBack } from '../components/useCloseOnBack';
 import { api, ApiError } from '../api/client';
 import { Field, FormMessage, useSubmit } from '../components/Form';
 import { BRAND_NAME, HeartIcon } from '../components/Brand';
@@ -49,7 +50,8 @@ export function ClientLoginPage() {
   const [form, setForm] = useState({ username: params.get('u') ?? '', password: '' });
   const { busy, error, fields, onSubmit } = useSubmit(async () => {
     await api('/client/login', { method: 'POST', body: { ...form, username: form.username.trim() } });
-    navigate('/gallery');
+    // Replace the sign-in page, so Back from the gallery does not land on it again.
+    navigate('/gallery', { replace: true });
   });
   return (
     <AuthLayout title="Open your photo gallery">
@@ -112,6 +114,7 @@ export function GalleryPage() {
   const [onlySelected, setOnlySelected] = useState(false);
   const [album, setAlbum] = useState('');
   const [viewer, setViewer] = useState<number | null>(null);
+  useCloseOnBack(viewer !== null, () => setViewer(null));
   const [notice, setNotice] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [familyOpen, setFamilyOpen] = useState(false);
@@ -133,7 +136,7 @@ export function GalleryPage() {
     try {
       setInfo(await api<GalleryInfo>('/client/me'));
     } catch (error) {
-      if (error instanceof ApiError && error.status === 403) navigate('/gallery/login');
+      if (error instanceof ApiError && error.status === 403) navigate('/gallery/login', { replace: true });
     }
   }, [navigate]);
 
@@ -150,7 +153,7 @@ export function GalleryPage() {
         setCount(data.count);
         setNextPage(data.next_page);
       })
-      .catch(() => navigate('/gallery/login'));
+      .catch(() => navigate('/gallery/login', { replace: true }));
     return () => {
       current = false;
     };

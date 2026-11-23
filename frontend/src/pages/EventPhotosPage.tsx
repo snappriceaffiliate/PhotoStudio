@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { api, ApiError } from '../api/client';
 import { FormMessage } from '../components/Form';
+import { useCloseOnBack } from '../components/useCloseOnBack';
 
 /** One photo on this page, from either the photo list or the client's selection. */
 interface Tile {
@@ -88,6 +89,7 @@ export function EventPhotosPage() {
   const [nextPage, setNextPage] = useState<number | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState<Tile | null>(null);
+  useCloseOnBack(open !== null, () => setOpen(null));
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);

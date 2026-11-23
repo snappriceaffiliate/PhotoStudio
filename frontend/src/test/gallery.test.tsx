@@ -341,3 +341,28 @@ describe('sending the selection', () => {
     }
   });
 });
+
+describe('the phone Back button', () => {
+  it('closes the photo viewer instead of leaving the gallery', async () => {
+    gallery();
+    renderApp('/gallery');
+    await waitFor(() => expect(document.querySelectorAll('.gallery-grid li')).toHaveLength(3));
+    fireEvent.click(screen.getAllByRole('button', { name: 'View photo large' })[1]);
+    expect(await screen.findByRole('dialog', { name: 'Photo viewer' })).toBeTruthy();
+    expect(window.history.state?.overlay).toBe(true);
+    window.history.back();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Photo viewer' })).toBeNull());
+    expect(screen.getByRole('heading', { name: 'Wedding' })).toBeTruthy();
+  });
+
+  it('closing with ✕ takes the extra step back out of the history', async () => {
+    gallery();
+    renderApp('/gallery');
+    await waitFor(() => expect(document.querySelectorAll('.gallery-grid li')).toHaveLength(3));
+    fireEvent.click(screen.getAllByRole('button', { name: 'View photo large' })[0]);
+    await screen.findByRole('dialog', { name: 'Photo viewer' });
+    expect(window.history.state?.overlay).toBe(true);
+    press('Close');
+    await waitFor(() => expect(window.history.state?.overlay).toBeFalsy());
+  });
+});

@@ -63,10 +63,13 @@ export function installBrowserMocks() {
     window.scrollTo = vi.fn();
     Element.prototype.scrollIntoView = vi.fn();
   });
-  afterEach(() => {
+  afterEach(async () => {
     cleanup();
     vi.unstubAllGlobals();
     vi.useRealTimers();
+    // jsdom keeps one history for every test: let a closed viewer take its Back step now,
+    // so it cannot land in the next test.
+    await new Promise((resolve) => setTimeout(resolve, 20));
   });
 }
 
