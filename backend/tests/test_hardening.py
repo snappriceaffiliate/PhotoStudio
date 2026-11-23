@@ -123,6 +123,29 @@ class TestAdminTwoStepLogin:
         assert page.status_code == 200
         assert "Alpha wedding" in page.content.decode()
 
+    def test_one_device_needs_no_choosing(self, admin_user):
+        user, device = admin_user
+        client = Client()
+        response = client.post(
+            "/admin/login/?next=/admin/",
+            {
+                "username": user.email,
+                "password": PASSWORD,
+                "otp_token": f"{totp(device.bin_key):06d}",
+            },
+        )
+        assert response.status_code == 302 and response["Location"] == "/admin/"
+
+    def test_a_wrong_code_without_a_device_is_still_refused(self, admin_user):
+        user, _ = admin_user
+        client = Client()
+        response = client.post(
+            "/admin/login/?next=/admin/",
+            {"username": user.email, "password": PASSWORD, "otp_token": "000000"},
+        )
+        assert response.status_code == 200
+        assert client.get("/admin/events/event/").status_code == 302
+
 
 def test_security_headers(client, db):
     page = client.get("/some/screen")

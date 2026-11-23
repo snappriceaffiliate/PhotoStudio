@@ -5,11 +5,13 @@ from django.views.generic import RedirectView
 from django_otp.admin import OTPAdminSite
 from rest_framework.routers import SimpleRouter
 
+from apps.core.admin_login import OneStepOTPAdminAuthenticationForm
 from apps.core.views import health, spa
 from apps.events.views import AlbumViewSet, EventViewSet
 
 # The Django admin (platform staff only) requires an authenticator-app code at login.
 admin.site.__class__ = OTPAdminSite
+admin.site.login_form = OneStepOTPAdminAuthenticationForm
 
 router = SimpleRouter(trailing_slash=False)
 router.register("events", EventViewSet, basename="event")
