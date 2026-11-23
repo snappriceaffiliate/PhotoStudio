@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { deleteEventAfterConfirm } from './eventActions';
+import { useCloseOnBack } from '../components/useCloseOnBack';
 
 const PREVIEW_COUNT = 10;
 
@@ -53,6 +54,7 @@ function CopyToLocal({ eventId, count }: { eventId: string; count: number }) {
 export function SelectionPanel({ eventId, version, status }: { eventId: string; version: number; status: string }) {
   const [data, setData] = useState<SelectionData | null>(null);
   const [open, setOpen] = useState<SelectedPhoto | null>(null);
+  useCloseOnBack(open !== null, () => setOpen(null));
 
   useEffect(() => {
     api<SelectionData>(`/events/${eventId}/selection`).then(setData).catch(() => setData(null));
