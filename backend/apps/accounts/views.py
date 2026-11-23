@@ -214,6 +214,11 @@ class PasswordSetView(PublicView):
             password_validation.validate_password(v["password"], user)
         except DjangoValidationError as exc:
             return Response({"password": exc.messages}, status=status.HTTP_400_BAD_REQUEST)
+        if v["password_confirm"] != v["password"]:
+            return Response(
+                {"password_confirm": ["The passwords do not match."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         user.set_password(v["password"])
         if not user.email_verified:
             user.email_verified_at = timezone.now()  # the link proves they own the address
@@ -292,7 +297,7 @@ class PasswordChangeThrottle(UserRateThrottle):
 
 
 class PasswordChangeView(APIView):
-    """POST {current_password, new_password}. Other sessions are signed out; this one stays."""
+    """POST {current_password, new_password, new_password_confirm}. Other sessions are signed out; this one stays."""
 
     permission_classes = [IsAuthenticated]
     throttle_classes = [PasswordChangeThrottle]
@@ -311,6 +316,8 @@ class PasswordChangeView(APIView):
             password_validation.validate_password(new, user)
         except DjangoValidationError as exc:
             return Response({"new_password": exc.messages}, status=400)
+        if request.data.get("new_password_confirm") != new:
+            return Response({"new_password_confirm": ["The passwords do not match."]}, status=400)
         user.set_password(new)
         user.save(update_fields=["password"])
         update_session_auth_hash(request, user)

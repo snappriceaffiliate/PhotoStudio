@@ -79,12 +79,17 @@ describe('your account', () => {
     await screen.findByRole('heading', { name: 'Change password' });
     typeInto('Current password', 'wrong');
     typeInto('New password', 'a-new-strong-pass-77');
+    typeInto('Retype new password', 'a-new-strong-pass-7');
+    press('Change password');
+    expect(await screen.findByText('The passwords do not match.')).toBeTruthy();
+    typeInto('Retype new password', 'a-new-strong-pass-77');
     press('Change password');
     expect(await screen.findByText('This is not your current password.')).toBeTruthy();
     typeInto('Current password', 'right-one');
     press('Change password');
     expect(await screen.findByText(/Password changed/)).toBeTruthy();
     expect((screen.getByLabelText('New password') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('Retype new password') as HTMLInputElement).value).toBe('');
   });
 });
 

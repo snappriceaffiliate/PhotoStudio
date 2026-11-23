@@ -99,11 +99,15 @@ export function ResetPasswordPage() {
   const { setUser } = useAuth();
   const navigate = useNavigate();
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const invite = params.get('invite') === '1';
   const { busy, error, fields, onSubmit } = useSubmit(async () => {
+    if (confirm && confirm !== password) {
+      throw new ApiError(400, { password_confirm: ['The passwords do not match.'] });
+    }
     const me = await api<MeResponse>('/auth/password-set', {
       method: 'POST',
-      body: { uid: params.get('uid') ?? '', token: params.get('token') ?? '', password },
+      body: { uid: params.get('uid') ?? '', token: params.get('token') ?? '', password, password_confirm: confirm },
     });
     setUser(me.user);
     navigate('/events');
@@ -114,6 +118,8 @@ export function ResetPasswordPage() {
         <FormMessage error={error} />
         <Field label="New password" name="password" type="password" required autoComplete="new-password" errors={fields}
           hint="At least 8 characters, not a common password." value={password} onChange={(e) => setPassword(e.target.value)} />
+        <Field label="Retype new password" name="password_confirm" type="password" required autoComplete="new-password" errors={fields}
+          value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         <button type="submit" className="wide" disabled={busy}>{busy ? 'Saving…' : 'Save password'}</button>
         {error && <p className="aside"><Link to="/forgot-password">Request a new link</Link></p>}
       </form>

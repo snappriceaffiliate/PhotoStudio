@@ -129,19 +129,37 @@ class TestAccount:
         wrong = api.json(
             "post",
             "/api/v1/auth/password-change",
-            {"current_password": "nope", "new_password": "a-new-strong-pass-77"},
+            {
+                "current_password": "nope",
+                "new_password": "a-new-strong-pass-77",
+                "new_password_confirm": "a-new-strong-pass-77",
+            },
         )
         assert wrong.status_code == 400 and "current_password" in wrong.json()
+        mismatch = api.json(
+            "post",
+            "/api/v1/auth/password-change",
+            {
+                "current_password": PASSWORD,
+                "new_password": "a-new-strong-pass-77",
+                "new_password_confirm": "a-new-strong-pass-78",
+            },
+        )
+        assert mismatch.json() == {"new_password_confirm": ["The passwords do not match."]}
         weak = api.json(
             "post",
             "/api/v1/auth/password-change",
-            {"current_password": PASSWORD, "new_password": "123"},
+            {"current_password": PASSWORD, "new_password": "123", "new_password_confirm": "123"},
         )
         assert weak.status_code == 400 and "new_password" in weak.json()
         ok = api.json(
             "post",
             "/api/v1/auth/password-change",
-            {"current_password": PASSWORD, "new_password": "a-new-strong-pass-77"},
+            {
+                "current_password": PASSWORD,
+                "new_password": "a-new-strong-pass-77",
+                "new_password_confirm": "a-new-strong-pass-77",
+            },
         )
         assert ok.status_code == 200
         assert api.json("get", URL).status_code == 200  # this session still works

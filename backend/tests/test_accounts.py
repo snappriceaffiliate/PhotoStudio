@@ -156,12 +156,31 @@ class TestPasswordReset:
         _, owner = make_studio("alpha")
         api.json("post", "/api/v1/auth/password-reset", {"email": owner.email})
         params = link_params(outbox[0][2])
-        new = {"uid": params["uid"], "token": params["token"], "password": "another-strong-pass-42"}
+        new = {
+            "uid": params["uid"],
+            "token": params["token"],
+            "password": "another-strong-pass-42",
+            "password_confirm": "another-strong-pass-42",
+        }
         assert api.json("post", "/api/v1/auth/password-set", new).status_code == 200
         owner.refresh_from_db()
         assert owner.check_password("another-strong-pass-42")
         # The token stops working once the password has changed.
         assert api.json("post", "/api/v1/auth/password-set", new).status_code == 400
+
+    def test_the_two_new_passwords_must_match(self, api, make_studio, outbox):
+        _, owner = make_studio("alpha")
+        api.json("post", "/api/v1/auth/password-reset", {"email": owner.email})
+        params = link_params(outbox[0][2])
+        response = api.json(
+            "post",
+            "/api/v1/auth/password-set",
+            {**params, "password": "another-strong-pass-42", "password_confirm": "another"},
+        )
+        assert response.status_code == 400
+        assert response.json() == {"password_confirm": ["The passwords do not match."]}
+        owner.refresh_from_db()
+        assert owner.check_password(PASSWORD)  # unchanged, and the link still works
 
 
 class TestStaff:
@@ -179,7 +198,13 @@ class TestStaff:
         api.json("post", "/api/v1/auth/logout")
         params = link_params(outbox[-1][2])
         response = api.json(
-            "post", "/api/v1/auth/password-set", {**params, "password": "ravi-strong-pass-77"}
+            "post",
+            "/api/v1/auth/password-set",
+            {
+                **params,
+                "password": "ravi-strong-pass-77",
+                "password_confirm": "ravi-strong-pass-77",
+            },
         )
         assert response.json()["user"]["role"] == "staff"
         # Staff can work with events but cannot manage staff.
