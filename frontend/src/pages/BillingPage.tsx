@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { FormMessage } from '../components/Form';
-import { BRAND_NAME } from '../components/Brand';
+import { BRAND_NAME, CONTACT_EMAIL } from '../components/Brand';
 
 interface PlanInfo {
   code: string;
@@ -233,6 +233,9 @@ export function BillingPage() {
         })}
       </ul>
       <p className="muted">Payments are handled by Razorpay; card details never reach this app.</p>
+      <p className="muted">
+        Questions about a payment or your plan? Email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+      </p>
       {offer && currentPlan && (
         <ChangeDialog quote={offer} current={currentPlan} onCancel={() => setOffer(null)} onConfirm={() => checkout(offer.plan, offer.kind, offer)} />
       )}
