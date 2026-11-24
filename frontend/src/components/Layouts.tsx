@@ -2,7 +2,16 @@ import { useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import { Logo } from './Brand';
+import { CONTACT_EMAIL, Logo } from './Brand';
+
+/** "Contact us" with PickSnap's email, on sign-in pages and under every studio screen. */
+export function ContactUs({ lead = 'Need help?' }: { lead?: string }) {
+  return (
+    <p className="contact-us">
+      {lead} Contact us at <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+    </p>
+  );
+}
 
 /** Centered card for sign-in, sign-up and password screens. */
 export function AuthLayout({ title, children, footer }: { title: string; children: ReactNode; footer?: ReactNode }) {
@@ -14,6 +23,7 @@ export function AuthLayout({ title, children, footer }: { title: string; childre
         {children}
       </div>
       {footer && <div className="auth-footer">{footer}</div>}
+      <ContactUs />
     </div>
   );
 }
@@ -88,6 +98,9 @@ export function StudioLayout() {
       <main className="page">
         <Outlet />
       </main>
+      <footer className="site-footer">
+        <ContactUs lead="Questions or feedback?" />
+      </footer>
     </div>
   );
 }

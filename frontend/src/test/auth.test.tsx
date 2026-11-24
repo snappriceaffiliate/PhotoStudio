@@ -76,6 +76,21 @@ describe('logging in', () => {
     renderApp('/login');
     expect(await screen.findByRole('heading', { name: 'Events' })).toBeTruthy();
   });
+
+  it('shows how to contact PickSnap on the login page', async () => {
+    mockApi(session().routes);
+    renderApp('/login');
+    await screen.findByRole('heading', { name: 'Log in to your studio' });
+    expect(screen.getByRole('link', { name: 'contact@picksnap.in' }).getAttribute('href')).toBe('mailto:contact@picksnap.in');
+  });
+
+  it('shows the contact email at the bottom of studio screens', async () => {
+    const s = session(owner);
+    mockApi({ ...s.routes, ...events });
+    renderApp('/events');
+    await screen.findByRole('heading', { name: 'Events' });
+    expect(screen.getByRole('contentinfo').textContent).toContain('Questions or feedback? Contact us at contact@picksnap.in');
+  });
 });
 
 describe('signing up', () => {

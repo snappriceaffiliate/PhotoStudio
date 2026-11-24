@@ -8,6 +8,9 @@ import { LOGO_HEIGHT, LOGO_WIDTH, PICK_PATH, SNAP_PATH, TEXT_BASELINE, TEXT_X } 
 
 export const BRAND_NAME = 'PickSnap';
 
+/** Where studios reach PickSnap for help, billing questions and feedback. */
+export const CONTACT_EMAIL = 'contact@picksnap.in';
+
 /** The icon's shapes in its own 6..74 box; the colours are fixed brand colours. */
 function MarkShapes() {
   const clip = useId();
