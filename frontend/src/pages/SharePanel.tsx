@@ -33,7 +33,9 @@ const when = (iso: string | null) =>
 export function SharePanel({ event, onChanged }: { event: EventDetail; onChanged: () => void }) {
   const [clients, setClients] = useState<ClientLogin[]>([]);
   const [progress, setProgress] = useState<ProgressInfo | null>(null);
-  const { user } = useAuth();
+  const { user, refresh } = useAuth();
+  const mustConfirm = Boolean(user && !user.email_verified && user.sharing?.confirm_email_first !== false);
+  const [linkSent, setLinkSent] = useState(false);
   const [form, setForm] = useState({ client_name: '', email: '', phone: '' });
   const [revealed, setRevealed] = useState<ClientLogin | null>(null);
   const [copied, setCopied] = useState(false);
@@ -179,7 +181,25 @@ export function SharePanel({ event, onChanged }: { event: EventDetail; onChanged
         </ul>
       )}
 
-      {canShare ? (
+      {canShare && mustConfirm ? (
+        <div className="confirm-first" role="status">
+          <p>
+            <strong>Confirm your email address to share.</strong> We sent a link to {user?.email}. Open it, then come back
+            here.
+          </p>
+          <div className="actions">
+            <button type="button" className="secondary" onClick={() => void refresh()}>I have confirmed it</button>
+            {linkSent ? (
+              <span className="muted">A new link is on its way. Check your spam folder too.</span>
+            ) : (
+              <button type="button" className="link" onClick={async () => {
+                await api('/auth/resend-verification', { method: 'POST' }).catch(() => undefined);
+                setLinkSent(true);
+              }}>Send a new link</button>
+            )}
+          </div>
+        </div>
+      ) : canShare ? (
         <form onSubmit={share.onSubmit} noValidate>
           <p className="muted">
             {main

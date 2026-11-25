@@ -129,6 +129,9 @@ button.wide { width: 100%; margin-top: 8px; }
 .auth-card { width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 32px 28px; box-shadow: var(--shadow); }
 .auth-card h1 { font-size: 26px; margin-bottom: 20px; }
 .auth-footer { margin-top: 18px; font-size: 14px; color: var(--muted); }
+.confirm-first { padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.confirm-first p { margin: 0 0 10px; }
+.confirm-first .actions { align-items: center; margin: 0; }
 .contact-us { margin: 14px 0 0; font-size: 13px; color: var(--muted); text-align: center; overflow-wrap: anywhere; }
 .site-footer { max-width: 1160px; margin: 0 auto; padding: 20px 20px 32px; border-top: 1px solid var(--line); }
 .site-footer .contact-us { margin: 0; }

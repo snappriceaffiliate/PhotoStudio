@@ -268,6 +268,21 @@ describe('an event', () => {
     expect(callsTo(calls, 'POST', '/api/v1/events/e1/clients')[0].body).toMatchObject({ client_name: 'Priya Rao', phone: '98765 43210' });
   });
 
+  it('asks an unconfirmed studio to confirm its email before sharing', async () => {
+    const unconfirmed = { ...owner, email_verified: false, sharing: { client_email: false, confirm_email_first: true } };
+    const calls = mockApi({
+      ...eventRoutes(),
+      ...session(unconfirmed).routes,
+      'POST /api/v1/auth/resend-verification': reply(204),
+    });
+    renderApp('/events/e1');
+    const note = (await screen.findByText('Confirm your email address to share.')).closest('.confirm-first') as HTMLElement;
+    expect(screen.queryByRole('button', { name: 'Share with client' })).toBeNull();
+    fireEvent.click(within(note).getByRole('button', { name: 'Send a new link' }));
+    expect(await screen.findByText(/A new link is on its way. Check your spam folder too./)).toBeTruthy();
+    expect(callsTo(calls, 'POST', '/api/v1/auth/resend-verification')).toHaveLength(1);
+  });
+
   it('asks for a contact before sharing and shows the server message', async () => {
     mockApi(eventRoutes({
       'POST /api/v1/events/e1/clients': reply(400, { email: ["Enter the client's email, WhatsApp number, or both."] }),
