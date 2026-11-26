@@ -25,6 +25,7 @@ interface BillingInfo {
   plan_code: string | null;
   cancel_at_period_end: boolean;
   scheduled_plan_code?: string | null;
+  scheduled_over_limits?: string[];
   limits: { max_active_events: number | null; max_photos_per_event: number; max_staff: number };
   usage: { active_events: number; staff: number };
   plans: PlanInfo[];
@@ -37,6 +38,8 @@ interface Quote {
   charge_now_inr: number;
   days_left: number;
   starts_at: string | null;
+  /** What the studio has beyond the plan's limits, and what happens to it. */
+  over_limits?: string[];
 }
 
 interface CheckoutStart {
@@ -96,10 +99,15 @@ export function BillingPage() {
   async function choose(plan: PlanInfo) {
     setError('');
     setSuccess('');
-    if (!paying) return checkout(plan, 'new');
     setBusy(plan.code);
     try {
-      setOffer(await api<Quote>(`/billing/quote?plan=${encodeURIComponent(plan.code)}`));
+      const quote = await api<Quote>(`/billing/quote?plan=${encodeURIComponent(plan.code)}`);
+      // Nothing running to change: go straight to Razorpay unless the plan is too small.
+      if (!paying && !quote.over_limits?.length) {
+        setBusy('');
+        return checkout(plan, 'new');
+      }
+      setOffer(quote);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not work out the price. Try again.');
     } finally {
@@ -192,6 +200,11 @@ export function BillingPage() {
         <h2>{headline[info.state]}</h2>
         {info.state !== 'active' && info.state !== 'trial' && <p>{info.message}</p>}
         {scheduled && <p>Switching to the {scheduled.name} plan on {day(info.until)}.</p>}
+        {scheduled && !!info.scheduled_over_limits?.length && (
+          <ul className="change-summary over-limits">
+            {info.scheduled_over_limits.map((note) => <li key={note}>{note}</li>)}
+          </ul>
+        )}
         <dl className="usage">
           <div><dt>Active events</dt><dd>{info.usage.active_events} / {limit(info.limits.max_active_events)}</dd></div>
           <div><dt>Photos per event</dt><dd>up to {limit(info.limits.max_photos_per_event)}</dd></div>
@@ -236,7 +249,7 @@ export function BillingPage() {
       <p className="muted">
         Questions about a payment or your plan? Email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
       </p>
-      {offer && currentPlan && (
+      {offer && (currentPlan || offer.kind === 'new') && (
         <ChangeDialog quote={offer} current={currentPlan} onCancel={() => setOffer(null)} onConfirm={() => checkout(offer.plan, offer.kind, offer)} />
       )}
     </>
@@ -244,16 +257,25 @@ export function BillingPage() {
 }
 
 /** What a plan change does and costs, confirmed before Razorpay Checkout opens. */
-function ChangeDialog({ quote, current, onCancel, onConfirm }: { quote: Quote; current: PlanInfo; onCancel: () => void; onConfirm: () => void }) {
+function ChangeDialog({ quote, current, onCancel, onConfirm }: { quote: Quote; current?: PlanInfo; onCancel: () => void; onConfirm: () => void }) {
   const { plan } = quote;
   const from = day(quote.starts_at);
-  const keep = plan.code === current.code;
-  const title = quote.kind === 'upgrade' ? `Upgrade to ${plan.name}` : keep ? `Keep the ${plan.name} plan` : `Switch to ${plan.name} on ${from}`;
+  const keep = plan.code === current?.code;
+  const title = quote.kind === 'upgrade'
+    ? `Upgrade to ${plan.name}`
+    : quote.kind === 'new'
+      ? `Choose the ${plan.name} plan`
+      : keep ? `Keep the ${plan.name} plan` : `Switch to ${plan.name} on ${from}`;
+  const over = quote.over_limits ?? [];
   return (
     <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="change-title">
       <div className="dialog">
         <h2 id="change-title">{title}</h2>
-        {quote.kind === 'upgrade' ? (
+        {quote.kind === 'new' ? (
+          <ul className="change-summary">
+            <li><strong>{rupees(plan.price_inr)}</strong> every month, starting today.</li>
+          </ul>
+        ) : quote.kind === 'upgrade' && current ? (
           <ul className="change-summary">
             <li>The {plan.name} limits start <strong>now</strong>.</li>
             <li>
@@ -270,13 +292,20 @@ function ChangeDialog({ quote, current, onCancel, onConfirm }: { quote: Quote; c
             {keep ? (
               <li>Your plan continues after {from}. Nothing to pay today.</li>
             ) : (
-              <li>You keep the {current.name} plan until {from}. Nothing to pay today, and no refund for this month.</li>
+              <li>You keep the {current?.name} plan until {from}. Nothing to pay today, and no refund for this month.</li>
             )}
             <li>From {from}: <strong>{rupees(plan.price_inr)}</strong> every month.</li>
-            {!keep && plan.max_active_events !== null && (
-              <li>{plan.name} allows {plan.max_active_events} active events. Nothing is deleted; archive events if you have more.</li>
-            )}
+            {!keep && over.length === 0 && <li>Everything you have fits the {plan.name} plan. Nothing is deleted.</li>}
           </ul>
+        )}
+        {over.length > 0 && (
+          <div className="over-limits" role="note">
+            <h3>More than the {plan.name} plan allows</h3>
+            <p className="muted">Nothing is deleted.</p>
+            <ul className="change-summary">
+              {over.map((note) => <li key={note}>{note}</li>)}
+            </ul>
+          </div>
         )}
         <p className="muted">Razorpay asks you to approve the new monthly amount.</p>
         <div className="actions">

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { api } from '../api/client';
+import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { Field, FormMessage, useSubmit } from '../components/Form';
 import { PhotosIcon } from '../components/Brand';
@@ -199,6 +199,18 @@ export function StaffPage() {
     reload();
   }
 
+  const [turnOnError, setTurnOnError] = useState('');
+  async function turnOn(member: StaffMember) {
+    setTurnOnError('');
+    try {
+      await api(`/staff/${member.id}/turn-on`, { method: 'POST' });
+      setNotice(`${member.full_name} has access again.`);
+      reload();
+    } catch (err) {
+      setTurnOnError(err instanceof ApiError ? err.message : 'Could not turn them back on. Try again.');
+    }
+  }
+
   if (user?.role !== 'owner') return <FormMessage error="Only the studio owner can manage staff." />;
 
   return (
@@ -221,7 +233,7 @@ export function StaffPage() {
         </div>
       </form>
 
-      <FormMessage error={error} />
+      <FormMessage error={error || turnOnError} />
       {items && (
         <div className="table-wrap">
           <table>
@@ -238,6 +250,9 @@ export function StaffPage() {
                   <td>
                     {m.role === 'staff' && m.is_active && (
                       <button className="link danger" onClick={() => remove(m)}>Remove</button>
+                    )}
+                    {m.role === 'staff' && !m.is_active && (
+                      <button className="link" onClick={() => turnOn(m)}>Turn back on</button>
                     )}
                   </td>
                 </tr>

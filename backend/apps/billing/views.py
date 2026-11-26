@@ -61,6 +61,11 @@ class BillingView(APIView):
                 "current_period_end": sub.current_period_end,
                 "cancel_at_period_end": sub.cancel_at_period_end,
                 "scheduled_plan_code": sub.scheduled_plan.code if sub.scheduled_plan else None,
+                "scheduled_over_limits": entitlements.over_limits(
+                    request.studio_id, sub.scheduled_plan
+                )
+                if sub.scheduled_plan
+                else [],
                 "limits": {
                     "max_active_events": limits.max_active_events,
                     "max_photos_per_event": limits.max_photos_per_event,
@@ -107,6 +112,22 @@ NOT_AVAILABLE = Response(
 )
 
 
+def after_plan_change(sub: Subscription, old_plan_id) -> None:
+    """Apply a smaller plan's staff limit once it starts. Call inside a transaction."""
+    if sub.plan_id == old_plan_id:
+        return
+    members = entitlements.turn_off_extra_staff(sub)
+    if not members:
+        return
+    for m in members:
+        record(None, "staff.turned_off_by_plan", detail=m.email, studio_id=sub.studio_id)
+    owner = User.objects.filter(studio_id=sub.studio_id, role=User.Role.OWNER).first()
+    if owner:
+        from apps.notifications import emails
+
+        emails.staff_turned_off_email(owner, members, sub.limits.name)
+
+
 class QuoteView(APIView):
     """What choosing a plan would do and cost now, shown before Razorpay Checkout opens."""
 
@@ -120,7 +141,9 @@ class QuoteView(APIView):
             q = changes.quote(entitlements.subscription_for(request.studio_id), plan)
         except changes.ChangeRefused as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(_quote_data(q))
+        return Response(
+            {**_quote_data(q), "over_limits": entitlements.over_limits(request.studio_id, plan)}
+        )
 
 
 class SubscribeView(APIView):
@@ -196,6 +219,7 @@ def finish_checkout(sub: Subscription, remote: dict) -> str | None:
     old_was_running = sub.status == Subscription.Status.ACTIVE and not sub.cancel_at_period_end
     old_not_started = _not_started(sub)
     plan = sub.pending_plan
+    old_plan_id = sub.plan_id
     if kind == changes.SCHEDULED:
         # The current plan runs to the renewal date; the chosen one takes over then.
         sub.scheduled_plan = plan if plan and plan.pk != sub.plan_id else None
@@ -213,6 +237,7 @@ def finish_checkout(sub: Subscription, remote: dict) -> str | None:
     sub.pending_razorpay_subscription_id, sub.pending_plan = None, None
     sub.pending_change, sub.pending_charge_paise = "", 0
     sub.save()
+    after_plan_change(sub, old_plan_id)
     if (
         previous
         and previous != sub.razorpay_subscription_id
@@ -325,6 +350,7 @@ class CancelView(APIView):
 def apply_webhook(event: str, entity: dict, sub: Subscription) -> None:
     """Update a studio's subscription from one Razorpay subscription.* event."""
     sub.razorpay_status = entity.get("status", sub.razorpay_status)
+    old_plan_id = sub.plan_id
     if entity.get("current_end"):
         sub.current_period_end = _ts(entity["current_end"])
     plan = (
@@ -351,6 +377,7 @@ def apply_webhook(event: str, entity: dict, sub: Subscription) -> None:
     elif event == "subscription.updated" and plan:
         sub.plan = plan
     sub.save()
+    after_plan_change(sub, old_plan_id)
 
 
 @csrf_exempt
