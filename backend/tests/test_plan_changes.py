@@ -258,3 +258,120 @@ class TestRefused:
             None,
         )
         assert fake_razorpay["cancel"] == []  # already cancelled at period end
+
+
+def add_staff(studio, n):
+    from apps.accounts.models import User
+
+    with tenancy.bypass_rls():
+        return [
+            User.objects.create_user(
+                email=f"staff{i}@{studio.slug}.test",
+                password=PASSWORD,
+                full_name=f"Staff {i}",
+                studio=studio,
+                role=User.Role.STAFF,
+                date_joined=timezone.now() + timedelta(minutes=i),
+            )
+            for i in range(n)
+        ]
+
+
+class TestDowngradeLimits:
+    """Pro to Starter: warn about everything over Starter's limits, then turn off extra staff."""
+
+    def test_the_quote_lists_what_is_over_the_cheaper_plan(self, api, owner, fake_razorpay):
+        from .test_clients import make_event
+
+        on_plan(owner, "pro", days_left=10)
+        add_staff(owner, 3)
+        for n in range(7):
+            make_event(owner, title=f"Event {n}", photos=1)
+        with tenancy.bypass_rls():
+            owner.logo_key = "logos/x.webp"
+            owner.save(update_fields=["logo_key"])
+        notes = api.json("get", "/api/v1/billing/quote?plan=starter").json()["over_limits"]
+        assert notes[0].startswith("You have 4 people; Starter allows 1.")
+        assert "the 3 newest staff logins are turned off" in notes[0]
+        assert notes[1].startswith("You have 7 active events; Starter allows 5.")
+        assert "archive 2" in notes[1]
+        assert "standard look" in notes[2]
+        assert api.json("get", "/api/v1/billing/quote?plan=pro").status_code == 400
+        studio_notes = api.json("get", "/api/v1/billing/quote?plan=studio").json()["over_limits"]
+        assert studio_notes == [
+            "You have 4 people; Studio allows 3. When it starts, the 1 newest staff login is "
+            "turned off. To choose who keeps access, remove people on the Staff page first."
+        ]
+
+    def test_billing_repeats_the_warnings_while_the_downgrade_waits(
+        self, api, owner, fake_razorpay
+    ):
+        on_plan(owner, "pro", days_left=10)
+        add_staff(owner, 2)
+        api.json("post", "/api/v1/billing/subscribe", {"plan": "starter"})
+        approve(api)
+        billing = api.json("get", "/api/v1/billing").json()
+        assert billing["scheduled_plan_code"] == "starter"
+        assert billing["scheduled_over_limits"][0].startswith(
+            "You have 3 people; Starter allows 1."
+        )
+        with tenancy.bypass_rls():
+            from apps.accounts.models import User
+
+            assert User.objects.filter(studio=owner, is_active=True).count() == 3  # not yet
+
+    def test_when_the_cheaper_plan_starts_the_newest_staff_are_turned_off(
+        self, api, owner, fake_razorpay, monkeypatch
+    ):
+        from apps.accounts.models import User
+        from apps.audit.models import AuditEntry
+        from apps.notifications import emails
+
+        sent = []
+        monkeypatch.setattr(
+            emails, "_queue", lambda to, subject, body: sent.append((to, subject, body))
+        )
+        on_plan(owner, "pro", days_left=10)
+        oldest, middle, newest = add_staff(owner, 3)
+        api.json("post", "/api/v1/billing/subscribe", {"plan": "studio"})
+        approve(api)
+        webhook(
+            "subscription.charged",
+            {
+                "id": "sub_new1",
+                "status": "active",
+                "plan_id": "plan_studio",
+                "current_end": 1893456000,
+            },
+        )
+        with tenancy.bypass_rls():
+            active = set(
+                User.objects.filter(studio=owner, is_active=True).values_list("email", flat=True)
+            )
+            audit = list(
+                AuditEntry.objects.filter(action="staff.turned_off_by_plan").values_list(
+                    "detail", flat=True
+                )
+            )
+        assert active == {"owner@alpha.test", oldest.email, middle.email}
+        assert audit == [newest.email]
+        assert sent[-1][0] == "owner@alpha.test"
+        assert sent[-1][1] == "Staff logins turned off for the Studio plan"
+        assert newest.email in sent[-1][2]
+
+        # The owner chooses who keeps access: remove one person, then turn another back on.
+        full = api.json("post", f"/api/v1/staff/{newest.pk}/turn-on")
+        assert full.status_code == 402 and "allows 3 people" in full.json()["detail"]
+        assert api.json("delete", f"/api/v1/staff/{middle.pk}").status_code == 204
+        back = api.json("post", f"/api/v1/staff/{newest.pk}/turn-on")
+        assert back.status_code == 200 and back.json()["is_active"] is True
+
+    def test_moving_to_a_bigger_plan_turns_nobody_off(self, api, owner, fake_razorpay):
+        from apps.accounts.models import User
+
+        on_plan(owner, "studio", days_left=10)
+        add_staff(owner, 2)
+        api.json("post", "/api/v1/billing/subscribe", {"plan": "pro"})
+        approve(api)
+        with tenancy.bypass_rls():
+            assert User.objects.filter(studio=owner, is_active=True).count() == 3

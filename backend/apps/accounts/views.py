@@ -273,6 +273,25 @@ class StaffDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class StaffTurnOnView(APIView):
+    """POST: give a removed staff member access again, within the plan's limit."""
+
+    permission_classes = [IsStudioOwner]
+
+    def post(self, request, pk):
+        member = User.objects.filter(pk=pk, studio_id=request.user.studio_id).first()
+        if member is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        if not member.is_active:
+            entitlements.check_staff_limit(request.user.studio_id)
+            member.is_active = True
+            member.save(update_fields=["is_active"])
+            record(
+                request, "staff.turned_on", detail=member.email, studio_id=request.user.studio_id
+            )
+        return Response(StaffSerializer(member).data)
+
+
 class AccountView(APIView):
     """PATCH {full_name}: the logged-in person's own name."""
 

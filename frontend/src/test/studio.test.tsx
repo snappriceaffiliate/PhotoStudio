@@ -186,6 +186,24 @@ describe('staff', () => {
     expect(await screen.findByText('Ravi no longer has access.')).toBeTruthy();
   });
 
+  it('turns a removed member back on, or explains the plan limit', async () => {
+    const off = { ...member, is_active: false, has_password: true };
+    let full = true;
+    const calls = mockApi({
+      ...session(owner).routes,
+      'GET /api/v1/staff': [off],
+      'POST /api/v1/staff/m1/turn-on': () =>
+        full ? reply(402, { detail: 'Your Starter plan allows 1 people. Remove someone or choose a bigger plan.' }) : reply(200, { ...off, is_active: true }),
+    });
+    renderApp('/staff');
+    press(await screen.findByRole('button', { name: 'Turn back on' }).then((b) => b.textContent!));
+    expect((await screen.findByRole('alert')).textContent).toContain('Your Starter plan allows 1 people');
+    full = false;
+    press('Turn back on');
+    expect(await screen.findByText('Ravi has access again.')).toBeTruthy();
+    expect(callsTo(calls, 'POST', '/api/v1/staff/m1/turn-on')).toHaveLength(2);
+  });
+
   it('is closed to staff members', async () => {
     mockApi({ ...session(staff).routes, 'GET /api/v1/staff': reply(403, {}) });
     renderApp('/staff');
@@ -498,6 +516,7 @@ describe('billing', () => {
     const calls = mockApi({
       ...session(owner).routes,
       'GET /api/v1/billing': info,
+      'GET /api/v1/billing/quote': { kind: 'new', plan: plans[0], charge_now_inr: 0, days_left: 0, starts_at: null, over_limits: [] },
       'POST /api/v1/billing/subscribe': {
         subscription_id: 'sub_1', key_id: 'rzp_test_1', plan: plans[0], prefill: { name: 'Owner', email: 'o@x.com' }, studio_name: 'Lens',
       },
@@ -570,31 +589,55 @@ describe('billing', () => {
         'GET /api/v1/billing': paying,
         'GET /api/v1/billing/quote': {
           kind: 'scheduled', plan: three[0], charge_now_inr: 0, days_left: 0, starts_at: '2026-12-21T00:00:00Z',
+          over_limits: ['You have 3 people; Starter allows 1. When it starts, the 2 newest staff logins are turned off.'],
         },
       });
       renderApp('/billing');
       press(await screen.findByRole('button', { name: 'Switch to Starter' }).then((b) => b.textContent!));
       const dialog = await screen.findByRole('dialog', { name: /Switch to Starter on/ });
       expect(dialog.textContent).toContain('You keep the Studio plan until');
-      expect(dialog.textContent).toContain('Starter allows 5 active events. Nothing is deleted');
+      const warning = within(dialog).getByRole('note');
+      expect(warning.textContent).toContain('More than the Starter plan allows');
+      expect(warning.textContent).toContain('the 2 newest staff logins are turned off');
       expect(within(dialog).getByRole('button', { name: 'Continue to Razorpay' })).toBeTruthy();
       press('Not now');
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     });
 
     it('shows a waiting switch on the plan it starts', async () => {
-      mockApi({ ...session(owner).routes, 'GET /api/v1/billing': { ...paying, scheduled_plan_code: 'starter' } });
+      mockApi({
+        ...session(owner).routes,
+        'GET /api/v1/billing': { ...paying, scheduled_plan_code: 'starter', scheduled_over_limits: ['You have 9 active events; Starter allows 5.'] },
+      });
       renderApp('/billing');
       expect(await screen.findByText(/Switching to the Starter plan on/)).toBeTruthy();
+      expect(screen.getByText('You have 9 active events; Starter allows 5.')).toBeTruthy();
       expect(screen.getByText(/^From /)).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Keep Studio' })).toBeTruthy();
     });
+  });
+
+  it('warns before a trial studio chooses a plan smaller than what it has', async () => {
+    const calls = mockApi({
+      ...session(owner).routes,
+      'GET /api/v1/billing': info,
+      'GET /api/v1/billing/quote': {
+        kind: 'new', plan: plans[0], charge_now_inr: 0, days_left: 0, starts_at: null,
+        over_limits: ['You have 2 people; Studio allows 1. When it starts, the 1 newest staff login is turned off.'],
+      },
+    });
+    renderApp('/billing');
+    press(await screen.findByRole('button', { name: 'Choose Studio' }).then((b) => b.textContent!));
+    const dialog = await screen.findByRole('dialog', { name: 'Choose the Studio plan' });
+    expect(within(dialog).getByRole('note').textContent).toContain('the 1 newest staff login is turned off');
+    expect(callsTo(calls, 'POST', '/api/v1/billing/subscribe')).toHaveLength(0);
   });
 
   it('shows the server message when checkout cannot start', async () => {
     mockApi({
       ...session(owner).routes,
       'GET /api/v1/billing': info,
+      'GET /api/v1/billing/quote': { kind: 'new', plan: plans[0], charge_now_inr: 0, days_left: 0, starts_at: null, over_limits: [] },
       'POST /api/v1/billing/subscribe': reply(502, { detail: 'Could not reach Razorpay. Try again in a minute.' }),
     });
     renderApp('/billing');

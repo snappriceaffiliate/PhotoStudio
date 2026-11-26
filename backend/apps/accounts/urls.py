@@ -20,4 +20,5 @@ urlpatterns = [
     path("auth/password-set", views.PasswordSetView.as_view(), name="auth-password-set"),
     path("staff", views.StaffListView.as_view(), name="staff-list"),
     path("staff/<uuid:pk>", views.StaffDetailView.as_view(), name="staff-detail"),
+    path("staff/<uuid:pk>/turn-on", views.StaffTurnOnView.as_view(), name="staff-turn-on"),
 ]

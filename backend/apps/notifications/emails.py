@@ -92,3 +92,16 @@ def reminders_due_email(owner, items) -> None:
         + "\n".join(lines)
         + f"\n\nSend each a reminder on WhatsApp in one tap: {settings.APP_URL}/reminders",
     )
+
+
+def staff_turned_off_email(owner, members, plan_name: str) -> None:
+    names = "\n".join(f"- {m.full_name} ({m.email})" for m in members)
+    _queue(
+        owner.email,
+        f"Staff logins turned off for the {plan_name} plan",
+        f"Hello {owner.full_name},\n\n"
+        f"Your studio is now on the {plan_name} plan, which allows fewer people, so these "
+        f"logins were turned off:\n\n{names}\n\n"
+        f"To choose who has access, open {settings.APP_URL}/staff: remove someone, then turn "
+        "another person back on. Nothing they did in the studio was deleted.",
+    )
